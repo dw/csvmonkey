@@ -130,8 +130,8 @@ class CsvReader
         size_t cell_start = 0;
         int col = 0;
 
-        auto buf = stream_.buf();
-        auto size = stream_.size();
+        const char *buf = stream_.buf();
+        size_t size = stream_.size();
 
         void *state = &&cell_start;
 
@@ -259,7 +259,7 @@ int main()
         if(DEBUGON && rows++ >= 160075) {
             ENABLE_DEBUG();
             for(int i = 0; i < row.count; i++) {
-                auto cell = row.cells[i];
+                CsvCell &cell = row.cells[i];
                 printf("%d: %i: %.*s\n", rows, i, cell.size, cell.ptr);
             }
         }
