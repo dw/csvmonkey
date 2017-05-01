@@ -12,6 +12,7 @@ setup(
         Extension(
             name='csvninja',
             sources=['csvninja.cpp'],
+            extra_compile_args=['-msse4.2'],
         )
     ],
     zip_safe = False,

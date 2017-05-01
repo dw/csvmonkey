@@ -4,6 +4,8 @@
 
 int main()
 {
+    chdir("/home/dmw/py-csvninja");
+
     int fd = open("ram.csv", O_RDONLY);
     assert(fd != -1);
 

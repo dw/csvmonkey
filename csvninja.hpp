@@ -8,6 +8,8 @@
 #include <iostream>
 
 
+typedef char v16qi __attribute__ ((__vector_size__ (16)));
+
 
 #ifdef NDEBUG
 #   define DEBUG(x...) {}
@@ -158,7 +160,12 @@ class CsvReader
         void *state = &&cell_start;
 
 #define DISPATCH() { \
-    if(++pos >= size) \
+    ++pos; \
+    DISPATCH0(); \
+}
+
+#define DISPATCH0() { \
+    if(pos >= size) \
         break; \
     ch = buf[pos]; \
     goto *state; \
@@ -188,11 +195,16 @@ class CsvReader
                 }
                 DISPATCH()
 
-            in_quoted_cell:
-                if(ch == '"') {
+            in_quoted_cell: {
+                v16qi vtmp = __builtin_ia32_loaddqu(buf+pos);
+                int rc = __builtin_ia32_pcmpistri128((v16qi){'"'}, vtmp, 0);
+                if(rc) {
+                    pos += rc - 1;
+                } else {
                     state = &&in_escape_or_end_of_cell;
                 }
                 DISPATCH()
+            }
 
             in_unquoted_cell:
                 if(ch == ',' || ch == '\r' || ch == '\n') {
