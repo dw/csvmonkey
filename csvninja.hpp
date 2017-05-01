@@ -1,11 +1,14 @@
 
-#include <cstring>
-#include <unistd.h>
-#include <fcntl.h>
-#include <vector>
-#include <fstream>
 #include <cassert>
+#include <cstring>
+#include <fcntl.h>
+#include <fstream>
 #include <iostream>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <vector>
 
 
 typedef char v16qi __attribute__ ((__vector_size__ (16)));
@@ -33,6 +36,83 @@ class StreamCursor
     virtual const char *buf() = 0;
     virtual size_t size() = 0;
     virtual bool more(int shift=0) = 0;
+};
+
+
+class MappedFileCursor
+    : public StreamCursor
+{
+    void *map_;
+    size_t mapsize_;
+    size_t remain_;
+    char *buf_;
+
+    public:
+    MappedFileCursor()
+        : map_(0)
+        , mapsize_(0)
+        , remain_(0)
+        , buf_(0)
+    {
+    }
+
+    ~MappedFileCursor()
+    {
+        if(map_) {
+            ::munmap(map_, mapsize_);
+        }
+    }
+
+    virtual const char *buf()
+    {
+        return buf_;
+    }
+
+    virtual size_t size()
+    {
+        return remain_;
+    }
+
+    virtual bool more(int shift=0)
+    {
+        if(shift) {
+            if(shift > remain_) {
+                shift = remain_;
+            }
+
+            buf_ += shift;
+            remain_ -= shift;
+        } else {
+            buf_ = 0;
+            remain_ = 0;
+        }
+        return remain_ > 0;
+    }
+
+    bool open(const char *filename)
+    {
+        int fd = ::open(filename, O_RDONLY);
+        if(fd == -1) {
+            return false;
+        }
+
+        struct stat st;
+        if(fstat(fd, &st) == -1) {
+            ::close(fd);
+            return false;
+        }
+
+        map_ = ::mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+        ::close(fd);
+        if(map_ == NULL) {
+            return false;
+        }
+
+        madvise(map_, st.st_size, MADV_SEQUENTIAL);
+        mapsize_ = st.st_size;
+        remain_ = st.st_size;
+        buf_ = (char *)map_;
+    }
 };
 
 

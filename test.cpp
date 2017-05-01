@@ -6,13 +6,19 @@ int main()
 {
     chdir("/home/dmw/py-csvninja");
 
+#if 0
     int fd = open("ram.csv", O_RDONLY);
     assert(fd != -1);
 
     FdStreamCursor stream(fd);
     CsvReader reader(stream);
-    int rows = 0;
+#else
+    MappedFileCursor stream;
+    assert(stream.open("ram.csv"));
+    CsvReader reader(stream);
+#endif
 
+    int rows = 0;
     CsvCursor &row = reader.row();
     assert(reader.read_row());
 
@@ -36,6 +42,5 @@ int main()
         total_cost += cost_cell->as_double();
     }
 
-    close(fd);
     return 0;
 }
