@@ -262,7 +262,7 @@ class CsvReader
 
         DEBUG("row start = %d", row_start_);
         DEBUG("size = %d", size);
-        DEBUG("ch = %d %c", *buf, *buf);
+        DEBUG("ch = %d %c", (int) *buf, *buf);
         DEBUG("rest = %.10s", buf);
 
         for(;;) {
@@ -274,7 +274,7 @@ class CsvReader
                     cell_start = ++buf;
                     DISPATCH0(in_quoted_cell);
                 } else {
-                    cell_start = buf++;
+                    cell_start = buf;
                     DISPATCH0(in_unquoted_cell);
                 }
 
@@ -302,12 +302,28 @@ class CsvReader
                 }
             }
 
-            in_unquoted_cell:
-                if(*buf == ',' || *buf == '\r' || *buf == '\n') {
-                    //state = &&cell_start;
+            in_unquoted_cell: {
+                static const v16qi SEPS = {',', '\r', '\n'};
+                v16qi vtmp = __builtin_ia32_loaddqu(buf);
+                int rc = __builtin_ia32_pcmpistri128(SEPS, vtmp, 0);
+                if(rc) {
+                    buf += rc;
+                    DISPATCH0(in_unquoted_cell);
+                } else {
+                    CsvCell &cell = row_.cells[col++];
+                    row_.count = col;
+                    cell.ptr = cell_start;
+                    cell.size = buf - cell_start;
+
+                    if(*buf == '\n') {
+                        row_start_ = (buf - startp) + 1;
+                        return true;
+                    }
+
+                    ++buf;
+                    DISPATCH0(cell_start);
                 }
-                ++buf;
-                DISPATCH0(in_unquoted_cell)
+            }
 
             in_escape_or_end_of_cell:
                 if(*buf == ',' || *buf == '\n') {
