@@ -237,83 +237,106 @@ class CsvReader
     bool
     try_parse()
     {
-        size_t cell_start = 0;
         int col = 0;
 
         const char *buf = stream_.buf();
         size_t size = stream_.size();
+        const char *startp = buf;
+        const char *endp = buf + size;
+        const char *cell_start = 0;
 
         void *state = &&cell_start;
 
 #define DISPATCH() { \
-    ++pos; \
-    DISPATCH0(); \
+    ++buf; \
+    DISPATCH0(*state); \
 }
 
-#define DISPATCH0() { \
-    if(pos >= size) \
+//__builtin_prefetch(buf + pos + 16);
+//
+#define DISPATCH0(state_) { \
+    if(buf > endp) \
         break; \
-    ch = buf[pos]; \
-    goto *state; \
+    goto state_; \
 }
 
-        size_t pos = row_start_;
-        if(pos >= size) {
+        buf += row_start_;
+        if(buf > endp) {
             DEBUG("pos exceeds size");
             return false;
         }
 
-        char ch = buf[pos];
         DEBUG("row start = %d", row_start_);
         DEBUG("size = %d", size);
-        DEBUG("ch = %d %c", ch, ch);
-        DEBUG("rest = %.10s", buf + pos);
+        DEBUG("ch = %d %c", *buf, *buf);
+        DEBUG("rest = %.10s", buf);
 
         for(;;) {
             cell_start:
-                if(ch == '\r') {
-                } else if(ch == '"') {
+                if(*buf == '\r') {
+                    ++buf;
+                    DISPATCH0(cell_start)
+                } else if(*buf == '"') {
                     state = &&in_quoted_cell;
-                    cell_start = pos + 1;
+                    cell_start = ++buf;
+                    DISPATCH0(in_quoted_cell);
                 } else {
                     state = &&in_unquoted_cell;
-                    cell_start = pos;
+                    cell_start = buf++;
+                    DISPATCH0(in_unquoted_cell);
                 }
-                DISPATCH()
-
             in_quoted_cell: {
-                v16qi vtmp = __builtin_ia32_loaddqu(buf+pos);
+                v16qi vtmp = __builtin_ia32_loaddqu(buf);
                 int rc = __builtin_ia32_pcmpistri128((v16qi){'"'}, vtmp, 0);
                 if(rc) {
-                    pos += rc - 1;
+                    buf += rc;
+                    if(buf > endp) {
+                        break;
+                    }
+
+                    v16qi vtmp = __builtin_ia32_loaddqu(buf);
+                    int rc = __builtin_ia32_pcmpistri128((v16qi){'"'}, vtmp, 0);
+                    if(rc) {
+                        buf += rc;
+                        DISPATCH0(in_quoted_cell);
+                    } else {
+                        state = &&in_escape_or_end_of_cell;
+                        ++buf;
+                        DISPATCH0(in_escape_or_end_of_cell);
+                    }
                 } else {
                     state = &&in_escape_or_end_of_cell;
+                    ++buf;
+                    DISPATCH0(in_escape_or_end_of_cell);
                 }
-                DISPATCH()
             }
 
             in_unquoted_cell:
-                if(ch == ',' || ch == '\r' || ch == '\n') {
+                if(*buf == ',' || *buf == '\r' || *buf == '\n') {
                     state = &&cell_start;
                 }
                 DISPATCH()
 
             in_escape_or_end_of_cell:
-                if(ch == ',' || ch == '\n') {
-                    state = &&cell_start;
+                if(*buf == ',' || *buf == '\n') {
                     CsvCell &cell = row_.cells[col++];
                     row_.count = col;
-                    cell.ptr = &buf[cell_start];
-                    cell.size = pos - cell_start - 1;
+                    cell.ptr = cell_start;
+                    cell.size = buf - cell_start - 1;
 
-                    if(ch == '\n') {
-                        row_start_ = pos + 1;
+                    if(*buf == '\n') {
+                        row_start_ = (buf - startp) + 1;
                         return true;
                     }
+
+                    state = &&cell_start;
+                    ++buf;
+                    DISPATCH0(cell_start);
                 } else {
                     state = &&in_quoted_cell;
+                    ++buf;
+                    DISPATCH0(in_quoted_cell);
                 }
-                DISPATCH()
         }
 
         return false;
