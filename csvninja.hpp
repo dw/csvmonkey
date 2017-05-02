@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
+#include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -189,9 +190,14 @@ struct CsvCell
         return std::string(ptr, size);
     }
 
+    bool equals(const char *str)
+    {
+        return 0 == ::strncmp(ptr, str, size);
+    }
+
     double as_double()
     {
-        return 0.0;
+        return strtod(ptr, NULL);
     }
 };
 
