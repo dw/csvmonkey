@@ -11,9 +11,12 @@
 #include <unistd.h>
 #include <vector>
 
+#include <emmintrin.h>
+#include <smmintrin.h>
+
 
 typedef char v16qi __attribute__ ((__vector_size__ (16)));
-
+typedef __v16qi v16qi;
 
 #ifdef NDEBUG
 #   define DEBUG(x...) {}
@@ -23,7 +26,7 @@ typedef char v16qi __attribute__ ((__vector_size__ (16)));
 #   define assert(x) (x)
 #else
 static int debug;
-#   define DEBUG(x, y...) if(debug) printf(x "\n", #y);
+#   define DEBUG(x, ...) if(debug) printf(x "\n", ##__VA_ARGS__);
 #   define ENABLE_DEBUG() { debug = 1; }
 #   define DEBUGON 1
 #endif
@@ -237,6 +240,7 @@ class CsvReader
 
     bool
     try_parse()
+        __attribute__((target("sse4.2")))
     {
         int col = 0;
 
@@ -260,8 +264,8 @@ class CsvReader
             return false;
         }
 
-        DEBUG("row start = %d", row_start_);
-        DEBUG("size = %d", size);
+        DEBUG("row start = %lu", row_start_);
+        DEBUG("size = %lu", size);
         DEBUG("ch = %d %c", (int) *buf, *buf);
         DEBUG("rest = %.10s", buf);
 
@@ -279,16 +283,16 @@ class CsvReader
                 }
 
             in_quoted_cell: {
-                v16qi vtmp = __builtin_ia32_loaddqu(buf);
-                int rc = __builtin_ia32_pcmpistri128((v16qi){'"'}, vtmp, 0);
+                v16qi vtmp = _mm_loadu_si128((__m128i *) buf);
+                int rc = _mm_cmpistri((v16qi){'"'}, vtmp, 0);
                 if(rc) {
                     buf += rc;
                     if(buf > endp) {
                         break;
                     }
 
-                    v16qi vtmp = __builtin_ia32_loaddqu(buf);
-                    int rc = __builtin_ia32_pcmpistri128((v16qi){'"'}, vtmp, 0);
+                    v16qi vtmp = _mm_loadu_si128((__m128i *) buf);
+                    int rc = _mm_cmpistri((v16qi){'"'}, vtmp, 0);
                     if(rc) {
                         buf += rc;
                         DISPATCH0(in_quoted_cell);
@@ -304,8 +308,8 @@ class CsvReader
 
             in_unquoted_cell: {
                 static const v16qi SEPS = {',', '\r', '\n'};
-                v16qi vtmp = __builtin_ia32_loaddqu(buf);
-                int rc = __builtin_ia32_pcmpistri128(SEPS, vtmp, 0);
+                v16qi vtmp = _mm_loadu_si128((__m128i *) buf);
+                int rc = _mm_cmpistri(SEPS, vtmp, 0);
                 if(rc) {
                     buf += rc;
                     DISPATCH0(in_unquoted_cell);
@@ -354,8 +358,9 @@ class CsvReader
     read_row()
     {
         if(! try_parse()) {
-            DEBUG("try_parse failed row_start_=%d stream_.size()=%d", row_start_, stream_.size());
-            DEBUG("shift = %d", stream_.size() - row_start_);
+            DEBUG("try_parse failed row_start_=%lu stream_.size()=%lu",
+                  row_start_, stream_.size());
+            DEBUG("shift = %d", (int) (stream_.size() - row_start_));
             int rc = stream_.more(stream_.size() - row_start_);
             row_start_ = 0;
             if(! rc) {

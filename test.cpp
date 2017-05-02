@@ -40,7 +40,7 @@ int main()
             ENABLE_DEBUG();
             for(int i = 0; i < row.count; i++) {
                 CsvCell &cell = row.cells[i];
-                printf("%d: %i: %.*s\n", rows, i, cell.size, cell.ptr);
+                printf("%d: %i: %.*s\n", rows, i, (int)cell.size, cell.ptr);
             }
         }
 
