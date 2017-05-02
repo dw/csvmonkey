@@ -57,6 +57,6 @@ int main()
     auto finish = std::chrono::high_resolution_clock::now();
 
     printf("%lf\n", total_cost);
-    std::cout << (std::chrono::duration_cast<std::chrono::milliseconds>(finish-start).count()) << " ms\n";
+    std::cout << (std::chrono::duration_cast<std::chrono::microseconds>(finish-start).count()) << " us\n";
     return 0;
 }
