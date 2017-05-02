@@ -113,6 +113,7 @@ class MappedFileCursor
         mapsize_ = st.st_size;
         remain_ = st.st_size;
         buf_ = (char *)map_;
+        return true;
     }
 };
 
@@ -245,13 +246,6 @@ class CsvReader
         const char *endp = buf + size;
         const char *cell_start = 0;
 
-        void *state = &&cell_start;
-
-#define DISPATCH() { \
-    ++buf; \
-    DISPATCH0(*state); \
-}
-
 //__builtin_prefetch(buf + pos + 16);
 //
 #define DISPATCH0(state_) { \
@@ -277,14 +271,13 @@ class CsvReader
                     ++buf;
                     DISPATCH0(cell_start)
                 } else if(*buf == '"') {
-                    state = &&in_quoted_cell;
                     cell_start = ++buf;
                     DISPATCH0(in_quoted_cell);
                 } else {
-                    state = &&in_unquoted_cell;
                     cell_start = buf++;
                     DISPATCH0(in_unquoted_cell);
                 }
+
             in_quoted_cell: {
                 v16qi vtmp = __builtin_ia32_loaddqu(buf);
                 int rc = __builtin_ia32_pcmpistri128((v16qi){'"'}, vtmp, 0);
@@ -300,12 +293,10 @@ class CsvReader
                         buf += rc;
                         DISPATCH0(in_quoted_cell);
                     } else {
-                        state = &&in_escape_or_end_of_cell;
                         ++buf;
                         DISPATCH0(in_escape_or_end_of_cell);
                     }
                 } else {
-                    state = &&in_escape_or_end_of_cell;
                     ++buf;
                     DISPATCH0(in_escape_or_end_of_cell);
                 }
@@ -313,9 +304,10 @@ class CsvReader
 
             in_unquoted_cell:
                 if(*buf == ',' || *buf == '\r' || *buf == '\n') {
-                    state = &&cell_start;
+                    //state = &&cell_start;
                 }
-                DISPATCH()
+                ++buf;
+                DISPATCH0(in_unquoted_cell)
 
             in_escape_or_end_of_cell:
                 if(*buf == ',' || *buf == '\n') {
@@ -329,11 +321,9 @@ class CsvReader
                         return true;
                     }
 
-                    state = &&cell_start;
                     ++buf;
                     DISPATCH0(cell_start);
                 } else {
-                    state = &&in_quoted_cell;
                     ++buf;
                     DISPATCH0(in_quoted_cell);
                 }
