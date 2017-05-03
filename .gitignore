@@ -1,0 +1,6 @@
+ram.*
+perf.data*
+**.*.sw[op]
+test
+*.pyc
+build
