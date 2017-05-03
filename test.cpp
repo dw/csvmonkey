@@ -4,9 +4,14 @@
 #include "csvninja.hpp"
 
 
-int main()
+int main(int argc, char **argv)
 {
     chdir("/home/dmw/py-csvninja");
+
+    const char *filename = "ram.csv";
+    if(argc > 1) {
+        filename = argv[1];
+    }
 
 #if 0
     int fd = open("ram.csv", O_RDONLY);
