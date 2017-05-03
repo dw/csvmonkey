@@ -14,6 +14,10 @@
 #include <emmintrin.h>
 #include <smmintrin.h>
 
+#ifdef USE_SPIRIT
+#include "boost/spirit/include/qi.hpp"
+#endif
+
 
 // typedef char __v16qi __attribute__ ((__vector_size__ (16)));
 
@@ -200,7 +204,15 @@ struct CsvCell
 
     double as_double()
     {
+#ifdef USE_SPIRIT
+        namespace qi = boost::spirit::qi;
+        using qi::double_;
+        double n;
+        qi::parse(ptr, ptr+size, double_, n);
+        return n;
+#else
         return strtod(ptr, NULL);
+#endif
     }
 };
 
