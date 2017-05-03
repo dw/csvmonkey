@@ -244,7 +244,7 @@ class CsvCursor
 
 
 template<typename... Args>
-static int __attribute__((__always_inline__))
+static int __attribute__((__always_inline__, target("sse4.2")))
 strcspn16(const char *buf, Args... args)
 {
     return _mm_cmpistri(
@@ -266,13 +266,14 @@ class CsvReader
     try_parse()
         __attribute__((target("sse4.2")))
     {
-        int col = 0;
-
         const char *buf = stream_.buf();
         size_t size = stream_.size();
         const char *startp = buf;
         const char *endp = buf + size;
         const char *cell_start = 0;
+        CsvCell *cell = row_.cells;
+
+        row_.count = 0;
 
 //__builtin_prefetch(buf + pos + 16);
 //
@@ -334,10 +335,10 @@ class CsvReader
                     buf += rc;
                     DISPATCH0(in_unquoted_cell);
                 } else {
-                    CsvCell &cell = row_.cells[col++];
-                    row_.count = col;
-                    cell.ptr = cell_start;
-                    cell.size = buf - cell_start;
+                    cell->ptr = cell_start;
+                    cell->size = buf - cell_start;
+                    ++cell;
+                    ++row_.count;
 
                     if(*buf == '\n') {
                         row_start_ = (buf - startp) + 1;
@@ -351,10 +352,10 @@ class CsvReader
 
             in_escape_or_end_of_cell:
                 if(*buf == ',' || *buf == '\n') {
-                    CsvCell &cell = row_.cells[col++];
-                    row_.count = col;
-                    cell.ptr = cell_start;
-                    cell.size = buf - cell_start - 1;
+                    cell->ptr = cell_start;
+                    cell->size = buf - cell_start - 1;
+                    ++cell;
+                    ++row_.count;
 
                     if(*buf == '\n') {
                         row_start_ = (buf - startp) + 1;
