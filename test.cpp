@@ -14,14 +14,14 @@ int main(int argc, char **argv)
     }
 
 #if 0
-    int fd = open("ram.csv", O_RDONLY);
+    int fd = open(filename, O_RDONLY);
     assert(fd != -1);
 
     FdStreamCursor stream(fd);
     CsvReader reader(stream);
 #else
     MappedFileCursor stream;
-    assert(stream.open("ram.csv"));
+    assert(stream.open(filename));
     CsvReader reader(stream);
 #endif
 
@@ -39,6 +39,7 @@ int main(int argc, char **argv)
 
     double total_cost = 0;
     auto start = std::chrono::high_resolution_clock::now();
+    int i = 0;
 
     while(reader.read_row()) {
         if(DEBUGON && rows++ >= 160075) {
@@ -48,8 +49,11 @@ int main(int argc, char **argv)
                 printf("%d: %i: %.*s\n", rows, i, (int)cell.size, cell.ptr);
             }
         }
+        if(DEBUGON && (++i == 4)) {
+            break;
+        }
 
-        if(1) {
+        if(0) {
             if(record_type_cell->equals("LineItem")) {
                 total_cost += cost_cell->as_double();
             } else if(record_type_cell->equals("Rounding")) {
