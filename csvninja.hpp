@@ -15,8 +15,7 @@
 #include <smmintrin.h>
 
 
-typedef char v16qi __attribute__ ((__vector_size__ (16)));
-typedef __v16qi v16qi;
+// typedef char __v16qi __attribute__ ((__vector_size__ (16)));
 
 #ifdef NDEBUG
 #   define DEBUG(x...) {}
@@ -231,6 +230,19 @@ class CsvCursor
 };
 
 
+
+template<typename... Args>
+static int __attribute__((__always_inline__))
+strcspn16(const char *buf, Args... args)
+{
+    return _mm_cmpistri(
+        (__m128i) (__v16qi) {args...},
+        _mm_loadu_si128((__m128i *) buf),
+        0
+    );
+}
+
+
 class CsvReader
 {
     public:
@@ -283,16 +295,14 @@ class CsvReader
                 }
 
             in_quoted_cell: {
-                v16qi vtmp = _mm_loadu_si128((__m128i *) buf);
-                int rc = _mm_cmpistri((v16qi){'"'}, vtmp, 0);
+                int rc = strcspn16(buf, '"');
                 if(rc) {
                     buf += rc;
                     if(buf > endp) {
                         break;
                     }
 
-                    v16qi vtmp = _mm_loadu_si128((__m128i *) buf);
-                    int rc = _mm_cmpistri((v16qi){'"'}, vtmp, 0);
+                    int rc = strcspn16(buf, '"');
                     if(rc) {
                         buf += rc;
                         DISPATCH0(in_quoted_cell);
@@ -307,9 +317,7 @@ class CsvReader
             }
 
             in_unquoted_cell: {
-                static const v16qi SEPS = {',', '\r', '\n'};
-                v16qi vtmp = _mm_loadu_si128((__m128i *) buf);
-                int rc = _mm_cmpistri(SEPS, vtmp, 0);
+                int rc = strcspn16(buf, ',', '\r', '\n');
                 if(rc) {
                     buf += rc;
                     DISPATCH0(in_unquoted_cell);
