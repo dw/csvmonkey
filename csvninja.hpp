@@ -42,7 +42,7 @@ class StreamCursor
     public:
     virtual const char *buf() = 0;
     virtual size_t size() = 0;
-    virtual bool more(int shift=0) = 0;
+    virtual bool more(size_t shift=0) = 0;
 };
 
 
@@ -80,19 +80,15 @@ class MappedFileCursor
         return remain_;
     }
 
-    virtual bool more(int shift=0)
+    virtual bool more(size_t shift=0)
     {
-        if(shift) {
-            if(shift > remain_) {
-                shift = remain_;
-            }
-
-            buf_ += shift;
-            remain_ -= shift;
-        } else {
-            buf_ = 0;
-            remain_ = 0;
+        if(shift > remain_) {
+            shift = remain_;
         }
+        DEBUG("remain_ = %lu, shift = %lu", remain_, shift);
+        buf_ += remain_ - shift;
+        remain_ -= remain_ - shift;
+        DEBUG("new remain_ = %lu, shift = %lu", remain_, shift);
         return remain_ > 0;
     }
 
@@ -149,7 +145,7 @@ class BufferedStreamCursor
         return size_;
     }
 
-    virtual bool more(int shift=0)
+    virtual bool more(size_t shift=0)
     {
         assert(shift >= 0);
         assert(shift <= size_);
