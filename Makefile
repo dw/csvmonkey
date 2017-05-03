@@ -17,5 +17,5 @@ pgo:
 
 grind:
 	rm -f cachegrind.out.*
-	valgrind --tool=cachegrind --branch-sim=yes ./test
+	valgrind --tool=cachegrind --branch-sim=yes ./test ram.64mb.csv
 	cg_annotate --auto=yes cachegrind.out.*
