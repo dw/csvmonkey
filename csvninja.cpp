@@ -238,7 +238,6 @@ reader_subscript(ReaderObject *self, PyObject *key)
             return NULL;
         }
         index = (int) PyInt_AS_LONG(py_index);
-        Py_DECREF(py_index);
     }
 
     if(index > self->reader.row_.count) {
