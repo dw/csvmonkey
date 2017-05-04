@@ -9,12 +9,21 @@ extern PyTypeObject CellType;
 extern PyTypeObject ReaderType;
 
 
+enum ReaderYields
+{
+    YIELDS_SELF,
+    YIELDS_TUPLE,
+    YIELDS_DICT
+};
+
+
 struct ReaderObject
 {
     PyObject_HEAD
     //CallableStreamCursor cursor;
     MappedFileCursor cursor;
     CsvReader reader;
+    ReaderYields yields;
 
     // Map header string -> index.
     PyObject *header_map;
@@ -160,16 +169,15 @@ build_header_map(ReaderObject *self)
 
 
 static PyObject *
-reader_from_path(PyObject *_self, PyObject *args)
+reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 {
-    if(PyTuple_GET_SIZE(args) < 1) {
-        PyErr_SetString(PyExc_TypeError, "from_path() requires at least one argument.");
-        return NULL;
-    }
+    static char *keywords[] = {"path", "yields", "header"};
+    const char *path;
+    const char *yields = "self";
+    int header = 1;
 
-    PyObject *path = PyTuple_GET_ITEM(args, 0);
-    if(! PyString_CheckExact(path)) {
-        PyErr_SetString(PyExc_TypeError, "from_path() argument must be string.");
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "s|si:from_path", keywords,
+            &path, &yields, &header)) {
         return NULL;
     }
 
@@ -178,9 +186,17 @@ reader_from_path(PyObject *_self, PyObject *args)
         return NULL;
     }
 
+    if(! strcmp(yields, "dict")) {
+        self->yields = YIELDS_DICT;
+    } else if(! strcmp(yields, "tuple")) {
+        self->yields = YIELDS_TUPLE;
+    } else {
+        self->yields = YIELDS_SELF;
+    }
+
     PyObject_Init((PyObject *) self, &ReaderType);
     new (&(self->cursor)) MappedFileCursor();
-    if(! self->cursor.open(PyString_AS_STRING(path))) {
+    if(! self->cursor.open(path)) {
         self->cursor.~MappedFileCursor();
         PyErr_SetString(PyExc_IOError, "Could not open file.");
         Py_DECREF(self);
@@ -188,7 +204,9 @@ reader_from_path(PyObject *_self, PyObject *args)
     }
 
     new (&(self->reader)) CsvReader(self->cursor);
-    assert(self->reader.read_row());
+    if(header) {
+        assert(self->reader.read_row());
+    }
     build_header_map(self);
     return (PyObject *) self;
 }
@@ -272,6 +290,66 @@ reader_find_cell(ReaderObject *self, PyObject *args)
 
 
 static PyObject *
+reader_astuple(ReaderObject *self)
+{
+    PyObject *tup = PyTuple_New(self->reader.row_.count);
+
+    if(tup) {
+        int ok = 0;
+        int count = self->reader.row_.count;
+        CsvCell *cell = &self->reader.row_.cells[0];
+
+        for(int i = 0; i < count; i++, cell++) {
+            PyObject *s = PyString_FromStringAndSize(cell->ptr, cell->size);
+            if(! s) {
+                Py_CLEAR(tup);
+                break;
+            }
+
+            PyTuple_SET_ITEM(tup, i, s);
+        }
+    }
+
+    return tup;
+}
+
+
+static PyObject *
+reader_asdict(ReaderObject *self)
+{
+    PyObject *out = PyDict_New();
+    if(out) {
+        Py_ssize_t ppos = 0;
+        PyObject *key;
+        PyObject *value;
+
+        CsvCell *cells = &self->reader.row_.cells[0];
+        while(PyDict_Next(self->header_map, &ppos, &key, &value)) {
+            int i = PyInt_AS_LONG(value);
+            if(i < self->reader.row_.count) {
+                PyObject *s = PyString_FromStringAndSize(
+                    cells[i].ptr, cells[i].size);
+                if(! s) {
+                    Py_CLEAR(out);
+                    break;
+                }
+
+                if(PyDict_SetItem(out, key, s)) {
+                    Py_DECREF(s);
+                    Py_CLEAR(out);
+                    break;
+                }
+
+                Py_DECREF(s);
+            }
+        }
+    }
+
+    return out;
+}
+
+
+static PyObject *
 reader_iter(PyObject *self)
 {
     Py_INCREF(self);
@@ -287,8 +365,20 @@ reader_iternext(ReaderObject *self)
         return NULL;
     }
 
-    Py_INCREF((PyObject *) self);
-    return (PyObject *)self;
+    PyObject *ret;
+    switch(self->yields) {
+    case YIELDS_SELF:
+        ret = (PyObject *) self;
+        Py_INCREF((PyObject *) self);
+        break;
+    case YIELDS_TUPLE:
+        ret = reader_astuple(self);
+        break;
+    case YIELDS_DICT:
+        ret = reader_asdict(self);
+        break;
+    }
+    return ret;
 }
 
 
@@ -366,6 +456,8 @@ static PyMappingMethods reader_mapping_methods = {
 
 static PyMethodDef reader_methods[] = {
     {"find_cell",   (PyCFunction)reader_find_cell, METH_VARARGS, ""},
+    {"astuple",     (PyCFunction)reader_astuple, METH_NOARGS, ""},
+    {"asdict",     (PyCFunction)reader_asdict, METH_NOARGS, ""},
     {0, 0, 0, 0}
 };
 
@@ -417,7 +509,7 @@ PyTypeObject ReaderType = {
  */
 
 static struct PyMethodDef module_methods[] = {
-    {"from_path", (PyCFunction) reader_from_path, METH_VARARGS},
+    {"from_path", (PyCFunction) reader_from_path, METH_VARARGS|METH_KEYWORDS},
     {0, 0, 0, 0}
 };
 
