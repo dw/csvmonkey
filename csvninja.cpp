@@ -24,6 +24,7 @@ struct ReaderObject
     MappedFileCursor cursor;
     CsvReader reader;
     ReaderYields yields;
+    int header;
 
     // Map header string -> index.
     PyObject *header_map;
@@ -186,6 +187,7 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
+    self->header = header;
     if(! strcmp(yields, "dict")) {
         self->yields = YIELDS_DICT;
     } else if(! strcmp(yields, "tuple")) {
@@ -350,6 +352,36 @@ reader_asdict(ReaderObject *self)
 
 
 static PyObject *
+reader_repr(ReaderObject *self)
+{
+    PyObject *obj;
+
+    if(self->header) {
+        obj = reader_asdict(self);
+    } else {
+        obj = reader_astuple(self);
+    }
+
+    if(! obj) {
+        return NULL;
+    }
+
+    PyObject *obj_repr = PyObject_Repr(obj);
+    Py_DECREF(obj);
+    if(! obj_repr) {
+        return NULL;
+    }
+
+    PyObject *repr = PyString_FromFormat(
+        "<csvninja._Reader positioned at %s>",
+        PyString_AsString(obj_repr)
+    );
+    Py_DECREF(obj_repr);
+    return repr;
+}
+
+
+static PyObject *
 reader_iter(PyObject *self)
 {
     Py_INCREF(self);
@@ -471,7 +503,7 @@ PyTypeObject ReaderType = {
     0,                          /*tp_getattr*/
     0,                          /*tp_setattr*/
     0,                          /*tp_compare*/
-    0,                          /*tp_repr*/
+    (reprfunc)reader_repr,      /*tp_repr*/
     0,                          /*tp_as_number*/
     &reader_sequence_methods,   /*tp_as_sequence*/
     &reader_mapping_methods,    /*tp_as_mapping*/
