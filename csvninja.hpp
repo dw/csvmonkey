@@ -255,18 +255,14 @@ class CsvReader
 {
     public:
     StreamCursor &stream_;
-    size_t row_start_;
     CsvCursor row_;
 
     bool
     try_parse()
         __attribute__((target("sse4.2")))
     {
-        const char *buf = stream_.buf();
-        size_t size = stream_.size();
-        const char *startp = buf;
-        const char *endp = buf + size;
-        const char *cell_start = 0;
+        const char *p = p_;
+        const char *cell_start;
         CsvCell *cell = row_.cells;
 
         row_.count = 0;
@@ -274,115 +270,130 @@ class CsvReader
 //__builtin_prefetch(buf + pos + 16);
 //
 #define DISPATCH0(state_) { \
-    if(buf > endp) \
+    if(p >= endp_) \
         break; \
     goto state_; \
 }
 
-        buf += row_start_;
-        if(buf > endp) {
+        if(p >= endp_) {
             DEBUG("pos exceeds size");
             return false;
         }
 
-        DEBUG("row start = %lu", row_start_);
-        DEBUG("size = %lu", size);
-        DEBUG("ch = %d %c", (int) *buf, *buf);
-        DEBUG("rest = %.10s", buf);
+        DEBUG("remain = %lu", endp_ - p);
+        DEBUG("ch = %d %c", (int) *p, *p);
+        //DEBUG("rest = %.10s", *p);
 
         for(;;) {
             cell_start:
-                if(*buf == '\r') {
-                    ++buf;
+                if(*p == '\r') {
+                    ++p;
                     DISPATCH0(cell_start)
-                } else if(*buf == '"') {
-                    cell_start = ++buf;
+                } else if(*p == '"') {
+                    cell_start = ++p;
                     DISPATCH0(in_quoted_cell);
                 } else {
-                    cell_start = buf;
+                    cell_start = p;
                     DISPATCH0(in_unquoted_cell);
                 }
 
             in_quoted_cell: {
-                int rc = strcspn16(buf, '"');
+                int rc = strcspn16(p, '"');
                 if(rc) {
-                    buf += rc;
-                    if(buf > endp) {
+                    p += rc;
+                    if(p >= endp_) {
                         break;
                     }
 
-                    int rc = strcspn16(buf, '"');
+                    int rc = strcspn16(p, '"');
                     if(rc) {
-                        buf += rc;
+                        p += rc;
                         DISPATCH0(in_quoted_cell);
                     } else {
-                        ++buf;
+                        ++p;
                         DISPATCH0(in_escape_or_end_of_cell);
                     }
                 } else {
-                    ++buf;
+                    ++p;
                     DISPATCH0(in_escape_or_end_of_cell);
                 }
             }
 
             in_unquoted_cell: {
-                int rc = strcspn16(buf, ',', '\r', '\n');
+                int rc = strcspn16(p, ',', '\r', '\n');
                 if(rc) {
-                    buf += rc;
+                    p += rc;
                     DISPATCH0(in_unquoted_cell);
                 } else {
                     cell->ptr = cell_start;
-                    cell->size = buf - cell_start;
+                    cell->size = p - cell_start;
                     ++cell;
                     ++row_.count;
 
-                    if(*buf == '\n') {
-                        row_start_ = (buf - startp) + 1;
+                    if(*p == '\n') {
+                        p_ = p + 1;
                         return true;
                     }
 
-                    ++buf;
+                    ++p;
                     DISPATCH0(cell_start);
                 }
             }
 
             in_escape_or_end_of_cell:
-                if(*buf == ',' || *buf == '\n') {
+                if(*p == ',') {
                     cell->ptr = cell_start;
-                    cell->size = buf - cell_start - 1;
+                    cell->size = p - cell_start - 1;
                     ++cell;
                     ++row_.count;
 
-                    if(*buf == '\n') {
-                        row_start_ = (buf - startp) + 1;
-                        return true;
-                    }
-
-                    ++buf;
+                    ++p;
                     DISPATCH0(cell_start);
+                } else if(*p == '\n') {
+                    cell->ptr = cell_start;
+                    cell->size = p - cell_start - 1;
+                    ++cell;
+                    ++row_.count;
+
+                    p_ = p + 1;
+                    return true;
                 } else {
-                    ++buf;
+                    ++p;
                     DISPATCH0(in_quoted_cell);
                 }
         }
 
+        DEBUG("error out");
         return false;
     }
 
+    const char *endp_;
+    const char *p_;
+
     public:
+
+    bool refill()
+    {
+        size_t shift = (p_ <  endp_) ? (stream_.size() - (endp_ - p_)) : 0;
+        DEBUG("endp_ = %#p  p_ = %#p  shift = %ld", endp_, p_, (long) shift)
+        int rc = stream_.more(shift);
+        p_ = stream_.buf();
+        endp_ = p_ + stream_.size();
+        DEBUG("refilled rc=%d p=%#p endp=%#p size=%lu",
+              rc, p_, endp_, stream_.size())
+        return rc;
+    }
 
     bool
     read_row()
     {
         if(! try_parse()) {
-            DEBUG("try_parse failed row_start_=%lu stream_.size()=%lu",
-                  row_start_, stream_.size());
-            DEBUG("shift = %d", (int) (stream_.size() - row_start_));
-            int rc = stream_.more(stream_.size() - row_start_);
-            row_start_ = 0;
-            if(! rc) {
+            DEBUG("try_parse failed stream_.size()=%lu", stream_.size());
+            if(! refill()) {
+                DEBUG("refill failed");
                 return false;
             }
+            DEBUG("refill succeeded, size()=%lu", stream_.size());
             return try_parse();
         }
         return true;
@@ -396,7 +407,8 @@ class CsvReader
 
     CsvReader(StreamCursor &stream)
         : stream_(stream)
-        , row_start_(0)
+        , p_(stream.buf())
+        , endp_(stream.buf() + stream.size())
     {
     }
 };
