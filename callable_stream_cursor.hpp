@@ -26,6 +26,7 @@ class CallableStreamCursor
         if(! PyString_CheckExact(result)) {
             PyErr_SetString(PyExc_TypeError,
                 "CSV callable must generate exactly a string.");
+            Py_DECREF(result);
             return -1;
         }
 

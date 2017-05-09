@@ -2,7 +2,7 @@
 #include <Python.h>
 
 #include "csvmonkey.hpp"
-// #include "callable_stream_cursor.hpp"
+#include "callable_stream_cursor.hpp"
 
 
 extern PyTypeObject CellType;
@@ -601,6 +601,7 @@ static PyMappingMethods row_mapping_methods = {
 static PyMethodDef row_methods[] = {
     {"astuple",     (PyCFunction)row_astuple, METH_NOARGS, ""},
     {"asdict",     (PyCFunction)row_asdict, METH_NOARGS, ""},
+    {0, 0, 0, 0}
 };
 
 PyTypeObject RowType = {
@@ -726,4 +727,9 @@ initcsvmonkey(void)
         return;
     }
     PyModule_AddObject(mod, "Reader", (PyObject *) &ReaderType);
+
+    if(PyType_Ready(&RowType)) {
+        return;
+    }
+    PyModule_AddObject(mod, "Row", (PyObject *) &ReaderType);
 }
