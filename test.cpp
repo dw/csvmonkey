@@ -1,12 +1,12 @@
 
 #include <chrono>
 
-#include "csvninja.hpp"
+#include "csvmonkey.hpp"
 
 
 int main(int argc, char **argv)
 {
-    chdir("/home/dmw/py-csvninja");
+    chdir("/home/dmw/py-csvmonkey");
 
     const char *filename = "ram.csv";
     if(argc > 1) {

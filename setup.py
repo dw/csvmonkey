@@ -14,15 +14,15 @@ extra_compile_args += ['-I/home/dmw/src/boost_1_64_0']
 extra_compile_args += ['-DNDEBUG']
 
 setup(
-    name = 'py-csvninja',
+    name = 'py-csvmonkey',
     version = '0.0.1',
-    #packages = ['csvninja'],
+    #packages = ['csvmonkey'],
     classifiers = [],
-    #ext_package = 'csvninja',
+    #ext_package = 'csvmonkey',
     ext_modules = [
         Extension(
-            name='csvninja',
-            sources=['csvninja.cpp'],
+            name='csvmonkey',
+            sources=['csvmonkey.cpp'],
             extra_compile_args=extra_compile_args,
         )
     ],

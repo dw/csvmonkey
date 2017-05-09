@@ -1,7 +1,7 @@
 
 #include <Python.h>
 
-#include "csvninja.hpp"
+#include "csvmonkey.hpp"
 // #include "callable_stream_cursor.hpp"
 
 
@@ -266,7 +266,7 @@ row_repr(RowObject *self)
     }
 
     PyObject *repr = PyString_FromFormat(
-        "<csvninja._Row positioned at %s>",
+        "<csvmonkey._Row positioned at %s>",
         PyString_AsString(obj_repr)
     );
     Py_DECREF(obj_repr);
@@ -469,7 +469,7 @@ static PyObject *
 reader_repr(ReaderObject *self)
 {
     return PyString_FromFormat(
-        "<csvninja._Reader positioned at %d>",
+        "<csvmonkey._Reader positioned at %d>",
         0
     );
 }
@@ -540,7 +540,7 @@ PyTypeObject CellType = {
     0,                          /*tp_setattro*/
     0,                          /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT,         /*tp_flags*/
-    "csvninja._Cell",           /*tp_doc*/
+    "csvmonkey._Cell",           /*tp_doc*/
     0,                          /*tp_traverse*/
     0,                          /*tp_clear*/
     (richcmpfunc) cell_richcmp, /*tp_richcompare*/
@@ -606,7 +606,7 @@ PyTypeObject RowType = {
     0,                          /*tp_setattro*/
     0,                          /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC,         /*tp_flags*/
-    "csvninja._Row",            /*tp_doc*/
+    "csvmonkey._Row",            /*tp_doc*/
     (traverseproc)row_traverse, /*tp_traverse*/
     (inquiry)row_clear,         /*tp_clear*/
     0,                          /*tp_richcompare*/
@@ -658,7 +658,7 @@ PyTypeObject ReaderType = {
     0,                          /*tp_setattro*/
     0,                          /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC,         /*tp_flags*/
-    "csvninja._Reader",         /*tp_doc*/
+    "csvmonkey._Reader",         /*tp_doc*/
     (traverseproc)reader_traverse, /*tp_traverse*/
     (inquiry)reader_clear,      /*tp_clear*/
     0,                          /*tp_richcompare*/
@@ -691,9 +691,9 @@ static struct PyMethodDef module_methods[] = {
 
 
 PyMODINIT_FUNC
-initcsvninja(void)
+initcsvmonkey(void)
 {
-    PyObject *mod = Py_InitModule3("csvninja", module_methods, "");
+    PyObject *mod = Py_InitModule3("csvmonkey", module_methods, "");
     if(! mod) {
         return;
     }
