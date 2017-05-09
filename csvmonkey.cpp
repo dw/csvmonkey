@@ -2,7 +2,7 @@
 #include <Python.h>
 
 #include "csvmonkey.hpp"
-// #include "callable_stream_cursor.hpp"
+#include "iterator_stream_cursor.hpp"
 
 
 extern PyTypeObject CellType;
@@ -18,11 +18,18 @@ enum ReaderYields
 };
 
 
+enum CursorType
+{
+    CURSOR_MAPPED_FILE,
+    CURSOR_ITERATOR
+};
+
+
 struct ReaderObject
 {
     PyObject_HEAD
-    //CallableStreamCursor cursor;
-    MappedFileCursor cursor;
+    CursorType cursor_type;
+    StreamCursor *cursor;
     CsvReader reader;
     ReaderYields yields;
     int header;
@@ -370,7 +377,16 @@ reader_dealloc(ReaderObject *self)
 {
     reader_clear(self);
     self->reader.~CsvReader();
-    self->cursor.~MappedFileCursor();
+    switch(self->cursor_type) {
+    case CURSOR_MAPPED_FILE:
+        delete (MappedFileCursor *)self->cursor;
+        break;
+    case CURSOR_ITERATOR:
+        delete (IteratorStreamCursor *)self->cursor;
+        break;
+    default:
+        assert(0);
+    }
     PyObject_Del(self);
 }
 
@@ -407,7 +423,7 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"path", "yields", "header"};
     const char *path;
-    const char *yields = "self";
+    const char *yields = "row";
     int header = 1;
 
     if(! PyArg_ParseTupleAndKeywords(args, kw, "s|si:from_path", keywords,
@@ -430,20 +446,86 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         self->yields = YIELDS_ROW;
     }
 
-    new (&(self->cursor)) MappedFileCursor();
-    if(! self->cursor.open(path)) {
-        self->cursor.~MappedFileCursor();
+    MappedFileCursor *cursor = new MappedFileCursor();
+    if(! cursor->open(path)) {
+        delete cursor;
         PyErr_SetString(PyExc_IOError, "Could not open file.");
         Py_DECREF(self);
         return NULL;
     }
 
-    new (&(self->reader)) CsvReader(self->cursor);
+    self->cursor_type = CURSOR_MAPPED_FILE;
+    self->cursor = cursor;
+    new (&(self->reader)) CsvReader(*self->cursor);
     if(header) {
         assert(self->reader.read_row());
     }
     build_header_map(self);
     return (PyObject *) self;
+}
+
+
+static PyObject *
+reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
+{
+    static char *keywords[] = {"iter", "yields", "header"};
+    PyObject *iterable;
+    const char *yields = "row";
+    int header = 1;
+
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|si:from_path", keywords,
+            &iterable, &yields, &header)) {
+        return NULL;
+    }
+
+    PyObject *iter = PyObject_GetIter(iterable);
+    if(! iter) {
+        return NULL;
+    }
+
+    ReaderObject *self = PyObject_New(ReaderObject, &ReaderType);
+    if(! self) {
+        Py_DECREF(iter);
+        return NULL;
+    }
+
+    self->py_row = row_new(self);
+    self->header = header;
+    if(! strcmp(yields, "dict")) {
+        self->yields = YIELDS_DICT;
+    } else if(! strcmp(yields, "tuple")) {
+        self->yields = YIELDS_TUPLE;
+    } else {
+        self->yields = YIELDS_ROW;
+    }
+
+    IteratorStreamCursor *cursor = new IteratorStreamCursor(iter);
+    self->cursor_type = CURSOR_ITERATOR;
+    self->cursor = cursor;
+    new (&(self->reader)) CsvReader(*self->cursor);
+    if(header) {
+        assert(self->reader.read_row());
+    }
+    build_header_map(self);
+    return (PyObject *) self;
+}
+
+
+static PyObject *
+reader_get_header(ReaderObject *self, PyObject *args)
+{
+    PyObject *lst = PyList_New(PyDict_Size(self->header_map));
+    Py_ssize_t ppos = 0;
+    PyObject *key;
+    PyObject *value;
+
+    while(PyDict_Next(self->header_map, &ppos, &key, &value)) {
+        int i = PyInt_AS_LONG(value);
+        PyList_SET_ITEM(lst, i, key);
+        Py_INCREF(key);
+    }
+
+    return lst;
 }
 
 
@@ -583,6 +665,7 @@ static PyMappingMethods row_mapping_methods = {
 static PyMethodDef row_methods[] = {
     {"astuple",     (PyCFunction)row_astuple, METH_NOARGS, ""},
     {"asdict",     (PyCFunction)row_asdict, METH_NOARGS, ""},
+    {0, 0, 0, 0}
 };
 
 PyTypeObject RowType = {
@@ -633,6 +716,7 @@ PyTypeObject RowType = {
  */
 
 static PyMethodDef reader_methods[] = {
+    {"get_header",  (PyCFunction)reader_get_header, METH_NOARGS, ""},
     {"find_cell",   (PyCFunction)reader_find_cell, METH_VARARGS, ""},
     {0, 0, 0, 0}
 };
@@ -686,6 +770,7 @@ PyTypeObject ReaderType = {
 
 static struct PyMethodDef module_methods[] = {
     {"from_path", (PyCFunction) reader_from_path, METH_VARARGS|METH_KEYWORDS},
+    {"from_iter", (PyCFunction) reader_from_iter, METH_VARARGS|METH_KEYWORDS},
     {0, 0, 0, 0}
 };
 
@@ -707,4 +792,9 @@ initcsvmonkey(void)
         return;
     }
     PyModule_AddObject(mod, "Reader", (PyObject *) &ReaderType);
+
+    if(PyType_Ready(&RowType)) {
+        return;
+    }
+    PyModule_AddObject(mod, "Row", (PyObject *) &ReaderType);
 }

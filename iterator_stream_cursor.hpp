@@ -1,31 +1,32 @@
 
-class CallableStreamCursor
+class IteratorStreamCursor
     : public BufferedStreamCursor
 {
-    PyObject *callable_;
-    PyObject *empty_tuple_;
+    PyObject *iter_;
 
     public:
-    CallableStreamCursor(PyObject *callable)
+    IteratorStreamCursor(PyObject *iter)
         : BufferedStreamCursor()
-        , callable_(callable)
-        , empty_tuple_(PyTuple_New(0))
+        , iter_(iter)
     {
-        assert(empty_tuple_ != NULL);
     }
 
-    ~CallableStreamCursor()
+    ~IteratorStreamCursor()
     {
-        Py_CLEAR(callable_);
-        Py_CLEAR(empty_tuple_);
+        Py_CLEAR(iter_);
     }
 
     virtual ssize_t readmore()
     {
-        PyObject *result = PyObject_Call(callable_, empty_tuple_, NULL);
+        PyObject *result = PyIter_Next(iter_);
+        if(! result) {
+            return -1;
+        }
+
         if(! PyString_CheckExact(result)) {
             PyErr_SetString(PyExc_TypeError,
-                "CSV callable must generate exactly a string.");
+                "CSV iterable must yield exactly a string.");
+            Py_DECREF(result);
             return -1;
         }
 

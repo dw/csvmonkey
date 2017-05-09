@@ -6,7 +6,7 @@
 
 int main(int argc, char **argv)
 {
-    chdir("/home/dmw/py-csvmonkey");
+    chdir("/Users/dmw/py-csvmonkey");
 
     const char *filename = "ram.csv";
     if(argc > 1) {
@@ -33,7 +33,9 @@ int main(int argc, char **argv)
     CsvCell *resource_id_cell;
     CsvCell *record_type_cell;
 
-    assert(row.by_value("Cost", cost_cell));
+    if(! row.by_value("Cost", cost_cell)) {
+        assert(row.by_value("UnBlendedCost", cost_cell));
+    }
     assert(row.by_value("ResourceId", resource_id_cell));
     assert(row.by_value("RecordType", record_type_cell));
 
@@ -42,7 +44,7 @@ int main(int argc, char **argv)
     int i = 0;
 
     while(reader.read_row()) {
-        if(DEBUGON && rows++ >= 160075) {
+        if(0 && DEBUGON && rows++ >= 160075) {
             ENABLE_DEBUG();
             for(int i = 0; i < row.count; i++) {
                 CsvCell &cell = row.cells[i];
