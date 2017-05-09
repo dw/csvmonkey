@@ -448,6 +448,24 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 
 
 static PyObject *
+reader_get_header(ReaderObject *self, PyObject *args)
+{
+    PyObject *lst = PyList_New(PyDict_Size(self->header_map));
+    Py_ssize_t ppos = 0;
+    PyObject *key;
+    PyObject *value;
+
+    while(PyDict_Next(self->header_map, &ppos, &key, &value)) {
+        int i = PyInt_AS_LONG(value);
+        PyList_SET_ITEM(lst, i, key);
+        Py_INCREF(key);
+    }
+
+    return lst;
+}
+
+
+static PyObject *
 reader_find_cell(ReaderObject *self, PyObject *args)
 {
     const char *s;
@@ -633,6 +651,7 @@ PyTypeObject RowType = {
  */
 
 static PyMethodDef reader_methods[] = {
+    {"get_header",  (PyCFunction)reader_get_header, METH_NOARGS, ""},
     {"find_cell",   (PyCFunction)reader_find_cell, METH_VARARGS, ""},
     {0, 0, 0, 0}
 };

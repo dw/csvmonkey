@@ -13,6 +13,9 @@ release: test
 test: test.cpp csvmonkey.hpp Makefile
 	g++ -std=c++11 $(CXXFLAGS) -msse4.2 $(X) -g -o test test.cpp
 
+clean:
+	rm test
+
 pgo: X+=-DNDEBUG
 pgo:
 	g++ -std=c++11 $(CXXFLAGS) -DNDEBUG -fprofile-generate -msse4.2 $(X) -g -o test test.cpp
