@@ -569,7 +569,9 @@ static PyObject *
 reader_iternext(ReaderObject *self)
 {
     if(! self->reader.read_row()) {
-        PyErr_SetNone(PyExc_StopIteration);
+        if(! PyErr_Occurred()) {
+            PyErr_SetNone(PyExc_StopIteration);
+        }
         return NULL;
     }
 
