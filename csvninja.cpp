@@ -7,11 +7,12 @@
 
 extern PyTypeObject CellType;
 extern PyTypeObject ReaderType;
+extern PyTypeObject RowType;
 
 
 enum ReaderYields
 {
-    YIELDS_SELF,
+    YIELDS_ROW,
     YIELDS_TUPLE,
     YIELDS_DICT
 };
@@ -26,6 +27,8 @@ struct ReaderObject
     ReaderYields yields;
     int header;
 
+    PyObject *py_row;
+
     // Map header string -> index.
     PyObject *header_map;
 };
@@ -36,6 +39,14 @@ struct CellObject
     PyObject_HEAD;
     ReaderObject *reader; // strong ref.
     CsvCell *cell;
+};
+
+
+struct RowObject
+{
+    PyObject_HEAD;
+    ReaderObject *reader; // strong ref, keeps row alive.
+    CsvCursor *row;
 };
 
 
@@ -135,18 +146,240 @@ cell_dealloc(CellObject *self)
 
 
 /*
+ * Row methods
+ */
+
+static int
+row_clear(RowObject *self)
+{
+    Py_CLEAR(self->reader);
+    return 0;
+}
+
+
+static void
+row_dealloc(RowObject *self)
+{
+    self->row = NULL;
+    Py_CLEAR(self->reader);
+    PyObject_Del(self);
+}
+
+
+static int
+row_traverse(RowObject *self, visitproc visit, void *arg)
+{
+    Py_VISIT(self->reader);
+    return 0;
+}
+
+
+static PyObject *
+row_new(ReaderObject *reader)
+{
+    RowObject *self = (RowObject *) PyObject_New(RowObject, &RowType);
+    if(self) {
+        Py_INCREF(reader);
+        self->reader = reader;
+        self->row = &reader->reader.row_;
+    }
+    return (PyObject *) self;
+}
+
+
+static PyObject *
+row_astuple(RowObject *self)
+{
+    PyObject *tup = PyTuple_New(self->row->count);
+    if(tup) {
+        int count = self->row->count;
+        CsvCell *cell = &self->row->cells[0];
+
+        for(int i = 0; i < count; i++, cell++) {
+            PyObject *s = PyString_FromStringAndSize(cell->ptr, cell->size);
+            if(! s) {
+                Py_CLEAR(tup);
+                break;
+            }
+            PyTuple_SET_ITEM(tup, i, s);
+        }
+    }
+
+    return tup;
+}
+
+
+static PyObject *
+row_asdict(RowObject *self)
+{
+    PyObject *out = PyDict_New();
+    if(out) {
+        Py_ssize_t ppos = 0;
+        PyObject *key;
+        PyObject *value;
+
+        CsvCell *cells = &self->row->cells[0];
+        while(PyDict_Next(self->reader->header_map, &ppos, &key, &value)) {
+            int i = PyInt_AS_LONG(value);
+            if(i < self->row->count) {
+                PyObject *s = PyString_FromStringAndSize(
+                    cells[i].ptr, cells[i].size);
+                if(! s) {
+                    Py_CLEAR(out);
+                    break;
+                }
+
+                if(PyDict_SetItem(out, key, s)) {
+                    Py_DECREF(s);
+                    Py_CLEAR(out);
+                    break;
+                }
+
+                Py_DECREF(s);
+            }
+        }
+    }
+
+    return out;
+}
+
+
+static PyObject *
+row_repr(RowObject *self)
+{
+    PyObject *obj;
+
+    if(self->reader->header) {
+        obj = row_asdict(self);
+    } else {
+        obj = row_astuple(self);
+    }
+
+    if(! obj) {
+        return NULL;
+    }
+
+    PyObject *obj_repr = PyObject_Repr(obj);
+    Py_DECREF(obj);
+    if(! obj_repr) {
+        return NULL;
+    }
+
+    PyObject *repr = PyString_FromFormat(
+        "<csvninja._Row positioned at %s>",
+        PyString_AsString(obj_repr)
+    );
+    Py_DECREF(obj_repr);
+    return repr;
+}
+
+
+static Py_ssize_t
+row_length(RowObject *self)
+{
+    return self->row->count;
+}
+
+
+static PyObject *
+row_getitem(RowObject *self, Py_ssize_t index)
+{
+    if(index < 0 || index > self->row->count) {
+        PyErr_Format(PyExc_IndexError,
+                     "index %ld greater than parsed col count %lu",
+                     (unsigned long) index,
+                     (unsigned long) self->row->count);
+        return NULL;
+    }
+
+    CsvCell &cell = self->row->cells[index];
+    return PyString_FromStringAndSize(cell.ptr, cell.size);
+}
+
+
+static Py_ssize_t
+row_getlength(RowObject *self)
+{
+    return (Py_ssize_t) self->row->count;
+}
+
+
+static PyObject *
+row_subscript(RowObject *self, PyObject *key)
+{
+    int index;
+
+    if(PyInt_CheckExact(key)) {
+        index = (int) PyInt_AS_LONG(key);
+    } else {
+        PyObject *py_index = PyDict_GetItem(self->reader->header_map, key);
+        if(! py_index) {
+            PyErr_Format(PyExc_KeyError, "No such key.");
+            return NULL;
+        }
+        index = (int) PyInt_AS_LONG(py_index);
+    }
+
+    if(index > self->row->count) {
+        PyErr_Format(PyExc_IndexError,
+                     "index %ld greater than parsed col count %lu",
+                     (unsigned long) index,
+                     (unsigned long) self->row->count);
+        return NULL;
+    }
+
+    CsvCell *cell = &self->row->cells[index];
+    return PyString_FromStringAndSize(cell->ptr, cell->size);
+}
+
+
+static PyObject *
+row_iter(RowObject *self)
+{
+    return NULL; /* TODO */
+    /*
+    if(self->reader->header) {
+        return PyObject_CallMethodObjArgs(
+            self->reader->header_map,
+            "iteritems",
+            NULL
+        );
+    }
+
+    Py_INCREF(self);
+    return self;
+    */
+}
+
+
+/*
  * Reader methods
  */
+
+static int
+reader_clear(ReaderObject *self)
+{
+    Py_CLEAR(self->py_row);
+    Py_CLEAR(self->header_map);
+    return 0;
+}
+
 
 static void
 reader_dealloc(ReaderObject *self)
 {
+    reader_clear(self);
     self->reader.~CsvReader();
     self->cursor.~MappedFileCursor();
-    if(self->header_map) {
-        Py_CLEAR(self->header_map);
-    }
     PyObject_Del(self);
+}
+
+
+static int
+reader_traverse(ReaderObject *self, visitproc visit, void *arg)
+{
+    Py_VISIT(self->py_row);
+    return 0;
 }
 
 
@@ -182,21 +415,21 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    ReaderObject *self = (ReaderObject *) PyObject_Malloc(sizeof(ReaderObject));
+    ReaderObject *self = PyObject_New(ReaderObject, &ReaderType);
     if(! self) {
         return NULL;
     }
 
+    self->py_row = row_new(self);
     self->header = header;
     if(! strcmp(yields, "dict")) {
         self->yields = YIELDS_DICT;
     } else if(! strcmp(yields, "tuple")) {
         self->yields = YIELDS_TUPLE;
     } else {
-        self->yields = YIELDS_SELF;
+        self->yields = YIELDS_ROW;
     }
 
-    PyObject_Init((PyObject *) self, &ReaderType);
     new (&(self->cursor)) MappedFileCursor();
     if(! self->cursor.open(path)) {
         self->cursor.~MappedFileCursor();
@@ -211,65 +444,6 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
     }
     build_header_map(self);
     return (PyObject *) self;
-}
-
-
-static Py_ssize_t
-reader_length(ReaderObject *self)
-{
-    return self->reader.row_.count;
-}
-
-
-static PyObject *
-reader_getitem(ReaderObject *self, Py_ssize_t index)
-{
-    if(index < 0 || index > self->reader.row_.count) {
-        PyErr_Format(PyExc_IndexError,
-                     "index %ld greater than parsed col count %lu",
-                     (unsigned long) index,
-                     (unsigned long) self->reader.row_.count);
-        return NULL;
-    }
-
-    CsvCell &cell = self->reader.row_.cells[index];
-    return PyString_FromStringAndSize(cell.ptr, cell.size);
-}
-
-
-static Py_ssize_t
-reader_getlength(ReaderObject *self)
-{
-    return (Py_ssize_t) self->reader.row_.count;
-}
-
-
-static PyObject *
-reader_subscript(ReaderObject *self, PyObject *key)
-{
-    int index;
-
-    if(PyInt_CheckExact(key)) {
-        index = (int) PyInt_AS_LONG(key);
-    } else {
-        PyObject *py_index = PyDict_GetItem(self->header_map, key);
-        if(! py_index) {
-            PyErr_Format(PyExc_KeyError, "No such key.");
-            return NULL;
-        }
-        index = (int) PyInt_AS_LONG(py_index);
-    }
-
-    if(index > self->reader.row_.count) {
-        PyErr_Format(PyExc_IndexError,
-                     "index %ld greater than parsed col count %lu",
-                     (unsigned long) index,
-                     (unsigned long) self->reader.row_.count);
-        return NULL;
-    }
-
-    CsvCell *cell = &self->reader.row_.cells[index];
-    return PyString_FromStringAndSize(cell->ptr, cell->size);
 }
 
 
@@ -292,92 +466,12 @@ reader_find_cell(ReaderObject *self, PyObject *args)
 
 
 static PyObject *
-reader_astuple(ReaderObject *self)
-{
-    PyObject *tup = PyTuple_New(self->reader.row_.count);
-
-    if(tup) {
-        int ok = 0;
-        int count = self->reader.row_.count;
-        CsvCell *cell = &self->reader.row_.cells[0];
-
-        for(int i = 0; i < count; i++, cell++) {
-            PyObject *s = PyString_FromStringAndSize(cell->ptr, cell->size);
-            if(! s) {
-                Py_CLEAR(tup);
-                break;
-            }
-
-            PyTuple_SET_ITEM(tup, i, s);
-        }
-    }
-
-    return tup;
-}
-
-
-static PyObject *
-reader_asdict(ReaderObject *self)
-{
-    PyObject *out = PyDict_New();
-    if(out) {
-        Py_ssize_t ppos = 0;
-        PyObject *key;
-        PyObject *value;
-
-        CsvCell *cells = &self->reader.row_.cells[0];
-        while(PyDict_Next(self->header_map, &ppos, &key, &value)) {
-            int i = PyInt_AS_LONG(value);
-            if(i < self->reader.row_.count) {
-                PyObject *s = PyString_FromStringAndSize(
-                    cells[i].ptr, cells[i].size);
-                if(! s) {
-                    Py_CLEAR(out);
-                    break;
-                }
-
-                if(PyDict_SetItem(out, key, s)) {
-                    Py_DECREF(s);
-                    Py_CLEAR(out);
-                    break;
-                }
-
-                Py_DECREF(s);
-            }
-        }
-    }
-
-    return out;
-}
-
-
-static PyObject *
 reader_repr(ReaderObject *self)
 {
-    PyObject *obj;
-
-    if(self->header) {
-        obj = reader_asdict(self);
-    } else {
-        obj = reader_astuple(self);
-    }
-
-    if(! obj) {
-        return NULL;
-    }
-
-    PyObject *obj_repr = PyObject_Repr(obj);
-    Py_DECREF(obj);
-    if(! obj_repr) {
-        return NULL;
-    }
-
-    PyObject *repr = PyString_FromFormat(
-        "<csvninja._Reader positioned at %s>",
-        PyString_AsString(obj_repr)
+    return PyString_FromFormat(
+        "<csvninja._Reader positioned at %d>",
+        0
     );
-    Py_DECREF(obj_repr);
-    return repr;
 }
 
 
@@ -399,15 +493,15 @@ reader_iternext(ReaderObject *self)
 
     PyObject *ret;
     switch(self->yields) {
-    case YIELDS_SELF:
-        ret = (PyObject *) self;
-        Py_INCREF((PyObject *) self);
+    case YIELDS_ROW:
+        ret = self->py_row;
+        Py_INCREF(ret);
         break;
     case YIELDS_TUPLE:
-        ret = reader_astuple(self);
+        ret = row_astuple((RowObject *) self->py_row);
         break;
     case YIELDS_DICT:
-        ret = reader_asdict(self);
+        ret = row_asdict((RowObject *) self->py_row);
         break;
     }
     return ret;
@@ -469,27 +563,77 @@ PyTypeObject CellType = {
 
 
 /*
- * Reader tpye.
+ * Row type.
  */
 
-static PySequenceMethods reader_sequence_methods = {
-    (lenfunc) reader_getlength,  /* sq_length */
+static PySequenceMethods row_sequence_methods = {
+    (lenfunc) row_getlength,  /* sq_length */
     NULL,                        /* sq_concat */
     NULL,                        /* sq_repeat */
-    (ssizeargfunc) reader_getitem,  /* sq_item */
+    (ssizeargfunc) row_getitem,  /* sq_item */
 };
 
 
-static PyMappingMethods reader_mapping_methods = {
-    (lenfunc) reader_getlength,      /* mp_length */
-    (binaryfunc) reader_subscript,   /* mp_subscript */
+static PyMappingMethods row_mapping_methods = {
+    (lenfunc) row_getlength,      /* mp_length */
+    (binaryfunc) row_subscript,   /* mp_subscript */
     0,                               /* mp_ass_subscript */
 };
 
+static PyMethodDef row_methods[] = {
+    {"astuple",     (PyCFunction)row_astuple, METH_NOARGS, ""},
+    {"asdict",     (PyCFunction)row_asdict, METH_NOARGS, ""},
+};
+
+PyTypeObject RowType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "_Row",                     /*tp_name*/
+    sizeof(RowObject),          /*tp_basicsize*/
+    0,                          /*tp_itemsize*/
+    (destructor) row_dealloc,   /*tp_dealloc*/
+    0,                          /*tp_print*/
+    0,                          /*tp_getattr*/
+    0,                          /*tp_setattr*/
+    0,                          /*tp_compare*/
+    (reprfunc)row_repr,         /*tp_repr*/
+    0,                          /*tp_as_number*/
+    &row_sequence_methods,      /*tp_as_sequence*/
+    &row_mapping_methods,       /*tp_as_mapping*/
+    0,                          /*tp_hash*/
+    0,                          /*tp_call*/
+    0,                          /*tp_str*/
+    0,                          /*tp_getattro*/
+    0,                          /*tp_setattro*/
+    0,                          /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC,         /*tp_flags*/
+    "csvninja._Row",            /*tp_doc*/
+    (traverseproc)row_traverse, /*tp_traverse*/
+    (inquiry)row_clear,         /*tp_clear*/
+    0,                          /*tp_richcompare*/
+    0,                          /*tp_weaklistoffset*/
+    (getiterfunc) row_iter,     /*tp_iter*/
+    0,                          /*tp_iternext*/
+    row_methods,                /*tp_methods*/
+    0,                          /*tp_members*/
+    0,                          /*tp_getset*/
+    0,                          /*tp_base*/
+    0,                          /*tp_dict*/
+    0,                          /*tp_descr_get*/
+    0,                          /*tp_descr_set*/
+    0,                          /*tp_dictoffset*/
+    0,                          /*tp_init*/
+    0,                          /*tp_alloc*/
+    0,                          /*tp_new*/
+    0,                          /*tp_free*/
+};
+
+
+/*
+ * Reader type.
+ */
+
 static PyMethodDef reader_methods[] = {
     {"find_cell",   (PyCFunction)reader_find_cell, METH_VARARGS, ""},
-    {"astuple",     (PyCFunction)reader_astuple, METH_NOARGS, ""},
-    {"asdict",     (PyCFunction)reader_asdict, METH_NOARGS, ""},
     {0, 0, 0, 0}
 };
 
@@ -505,18 +649,18 @@ PyTypeObject ReaderType = {
     0,                          /*tp_compare*/
     (reprfunc)reader_repr,      /*tp_repr*/
     0,                          /*tp_as_number*/
-    &reader_sequence_methods,   /*tp_as_sequence*/
-    &reader_mapping_methods,    /*tp_as_mapping*/
+    0,                          /*tp_as_sequence*/
+    0,                          /*tp_as_mapping*/
     0,                          /*tp_hash*/
     0,                          /*tp_call*/
     0,                          /*tp_str*/
     0,                          /*tp_getattro*/
     0,                          /*tp_setattro*/
     0,                          /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT,         /*tp_flags*/
+    Py_TPFLAGS_DEFAULT|Py_TPFLAGS_HAVE_GC,         /*tp_flags*/
     "csvninja._Reader",         /*tp_doc*/
-    0,                          /*tp_traverse*/
-    0,                          /*tp_clear*/
+    (traverseproc)reader_traverse, /*tp_traverse*/
+    (inquiry)reader_clear,      /*tp_clear*/
     0,                          /*tp_richcompare*/
     0,                          /*tp_weaklistoffset*/
     (getiterfunc) reader_iter,  /*tp_iter*/

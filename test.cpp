@@ -49,11 +49,11 @@ int main(int argc, char **argv)
                 printf("%d: %i: %.*s\n", rows, i, (int)cell.size, cell.ptr);
             }
         }
-        if(DEBUGON && (++i == 4)) {
+        if(DEBUGON && 0 && (++i == 4)) {
             break;
         }
 
-        if(0) {
+        if(1) {
             if(record_type_cell->equals("LineItem")) {
                 total_cost += cost_cell->as_double();
             } else if(record_type_cell->equals("Rounding")) {
