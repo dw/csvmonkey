@@ -14,7 +14,7 @@ extra_compile_args += ['-I/home/dmw/src/boost_1_64_0']
 extra_compile_args += ['-DNDEBUG']
 
 setup(
-    name = 'py-csvmonkey',
+    name = 'csvmonkey',
     version = '0.0.1',
     #packages = ['csvmonkey'],
     classifiers = [],
