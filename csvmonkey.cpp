@@ -780,23 +780,22 @@ static struct PyMethodDef module_methods[] = {
 PyMODINIT_FUNC
 initcsvmonkey(void)
 {
+    static const PyTypeObject *types[] = {
+        &CellType, &RowType, &ReaderType
+    };
+
     PyObject *mod = Py_InitModule3("csvmonkey", module_methods, "");
     if(! mod) {
         return;
     }
 
-    if(PyType_Ready(&CellType)) {
-        return;
+    for(int i = 0; i < (sizeof types / sizeof types[0]); i++) {
+        PyTypeObject *type = types[i];
+        if(PyType_Ready(type)) {
+            return;
+        }
+        if(PyModule_AddObject(mod, type->tp_name, (PyObject *)type)) {
+            return;
+        }
     }
-    PyModule_AddObject(mod, "Cell", (PyObject *) &CellType);
-
-    if(PyType_Ready(&ReaderType)) {
-        return;
-    }
-    PyModule_AddObject(mod, "Reader", (PyObject *) &ReaderType);
-
-    if(PyType_Ready(&RowType)) {
-        return;
-    }
-    PyModule_AddObject(mod, "Row", (PyObject *) &ReaderType);
 }
