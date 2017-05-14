@@ -11,15 +11,15 @@
 #include <unistd.h>
 #include <vector>
 
+#ifdef __SSE4_2__
 #include <emmintrin.h>
 #include <smmintrin.h>
+#endif // __SSE4_2__
 
 #ifdef USE_SPIRIT
 #include "boost/spirit/include/qi.hpp"
 #endif
 
-
-// typedef char __v16qi __attribute__ ((__vector_size__ (16)));
 
 #ifdef NDEBUG
 #   define DEBUG(x...) {}
@@ -213,6 +213,80 @@ struct CsvCell
 };
 
 
+#ifndef __SSE4_2__
+struct StringSpanner
+{
+    uint8_t charset_[256];
+
+    FallbackStringSpanner(const char *charset, bool c=true)
+    {
+        ::memset(charset_, !c, sizeof charset_);
+        for(int i = 0; charset[i]; i++) {
+            charset_[(unsigned) charset[i]] = c;
+        }
+        charset_[0] = 0;
+    }
+
+    size_t
+    operator()(const char *s)
+    {
+        const unsigned char * __restrict p = (const unsigned char *)s;
+        for(;; p += 4) {
+            unsigned int c0 = p[0];
+            unsigned int c1 = p[1];
+            unsigned int c2 = p[2];
+            unsigned int c3 = p[3];
+
+            int t0 = charset_[c0];
+            int t1 = charset_[c1];
+            int t2 = charset_[c2];
+            int t3 = charset_[c3];
+
+            if(4 != (t0 + t1 + t2 + t3)) {
+                if(! t0) {
+                    return p - (const unsigned char *)s;
+                }
+                if(! t1) {
+                    return ((p + 1) - (const unsigned char *)s);
+                }
+                if(! t2) {
+                    return ((p + 2) - (const unsigned char *)s);
+                }
+                return ((p + 3) - (const unsigned char *)s);
+            }
+        }
+    }
+};
+#endif // !__SSE4_2__
+
+
+#ifdef __SSE4_2__
+struct StringSpanner
+{
+    __m128i v_;
+
+    StringSpanner(const char *charset)
+    {
+        __v16qi vq = {0};
+        for(int i = 0; charset[i] && i < 16; i++) {
+            vq[i] = charset[i];
+        }
+        v_ = (__m128i) vq;
+    }
+
+    size_t __attribute__((__always_inline__, target("sse4.2")))
+    operator()(const char *buf)
+    {
+        return _mm_cmpistri(
+            v_,
+            _mm_loadu_si128((__m128i *) buf),
+            0
+        );
+    }
+};
+#endif // __SSE4_2__
+
+
 class CsvCursor
 {
     public:
@@ -375,11 +449,11 @@ class CsvReader
     bool refill()
     {
         size_t shift = (p_ <  endp_) ? (stream_.size() - (endp_ - p_)) : 0;
-        DEBUG("endp_ = %#p  p_ = %#p  shift = %ld", endp_, p_, (long) shift)
+        DEBUG("endp_ = %p  p_ = %p  shift = %ld", endp_, p_, (long) shift)
         int rc = stream_.more(shift);
         p_ = stream_.buf();
         endp_ = p_ + stream_.size();
-        DEBUG("refilled rc=%d p=%#p endp=%#p size=%lu",
+        DEBUG("refilled rc=%d p=%p endp=%p size=%lu",
               rc, p_, endp_, stream_.size())
         return rc;
     }
