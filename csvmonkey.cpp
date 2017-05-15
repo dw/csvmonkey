@@ -780,7 +780,7 @@ static struct PyMethodDef module_methods[] = {
 PyMODINIT_FUNC
 initcsvmonkey(void)
 {
-    static const PyTypeObject *types[] = {
+    static PyTypeObject *types[] = {
         &CellType, &RowType, &ReaderType
     };
 
