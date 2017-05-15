@@ -219,6 +219,7 @@ struct CsvCell
 
 
 #ifndef __SSE4_2__
+#warning Using non-SSE4.2 fallback implementation.
 struct StringSpanner
 {
     uint8_t charset_[256];
@@ -317,11 +318,14 @@ class CsvCursor
 
 class CsvReader
 {
-    public:
     StreamCursor &stream_;
     CsvCursor row_;
     StringSpanner quoted_cell_spanner_;
     StringSpanner unquoted_cell_spanner_;
+    const char *endp_;
+    const char *p_;
+    char delimiter_;
+    char quotechar_;
 
     bool
     try_parse()
@@ -416,11 +420,6 @@ class CsvReader
         return false;
     }
 
-    const char *endp_;
-    const char *p_;
-
-    public:
-
     bool refill()
     {
         size_t shift = (p_ <  endp_) ? (stream_.size() - (endp_ - p_)) : 0;
@@ -433,6 +432,7 @@ class CsvReader
         return rc;
     }
 
+    public:
     bool
     read_row()
     {
@@ -454,17 +454,14 @@ class CsvReader
         return row_;
     }
 
-    char delimiter_;
-    char quotechar_;
-
     CsvReader(StreamCursor &stream, char delimiter=',', char quotechar='"')
         : stream_(stream)
-        , delimiter_(delimiter)
-        , quotechar_(quotechar)
         , quoted_cell_spanner_(quotechar)
         , unquoted_cell_spanner_(delimiter, '\r', '\n')
-        , p_(stream.buf())
         , endp_(stream.buf() + stream.size())
+        , p_(stream.buf())
+        , delimiter_(delimiter)
+        , quotechar_(quotechar)
     {
     }
 };

@@ -34,6 +34,7 @@ struct ReaderObject
     ReaderYields yields;
     int header;
 
+    CsvCursor *row;
     PyObject *py_row;
 
     // Map header string -> index.
@@ -188,8 +189,8 @@ row_new(ReaderObject *reader)
     if(self) {
         Py_INCREF(reader);
         self->reader = reader;
-        self->row = &reader->reader.row_;
     }
+    self->row = reader->row;
     return (PyObject *) self;
 }
 
@@ -405,8 +406,8 @@ build_header_map(ReaderObject *self)
     self->header_map = PyDict_New();
     assert(self->header_map);
 
-    CsvCell *cell = &self->reader.row_.cells[0];
-    for(int i = 0; i < self->reader.row_.count; i++) {
+    CsvCell *cell = &self->row->cells[0];
+    for(int i = 0; i < self->row->count; i++) {
         PyObject *key = PyString_FromStringAndSize(cell->ptr, cell->size);
         PyObject *value = PyInt_FromLong(i);
         assert(key && value);
@@ -460,6 +461,7 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
     self->cursor_type = CURSOR_MAPPED_FILE;
     self->cursor = cursor;
     new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar);
+    self->row = &self->reader.row();
     if(header) {
         assert(self->reader.read_row());
     }
@@ -544,7 +546,7 @@ reader_find_cell(ReaderObject *self, PyObject *args)
     }
 
     CsvCell *cell;
-    if(! self->reader.row_.by_value(s, cell)) {
+    if(! self->row->by_value(s, cell)) {
         PyErr_Format(PyExc_KeyError, "%s", s);
         return NULL;
     }
