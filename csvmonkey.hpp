@@ -40,6 +40,11 @@ class CsvReader;
 class StreamCursor
 {
     public:
+    /**
+     * Current stream position. Must guarantee access to buf()[0..size()+15],
+     * with 15 trailing NULs to allow safely running PCMPSTRI on the final data
+     * byte.
+     */
     virtual const char *buf() = 0;
     virtual size_t size() = 0;
     virtual bool more(size_t shift=0) = 0;
@@ -218,12 +223,12 @@ struct StringSpanner
 {
     uint8_t charset_[256];
 
-    FallbackStringSpanner(const char *charset, bool c=true)
+    StringSpanner(char c1=0, char c2=0, char c3=0)
     {
-        ::memset(charset_, !c, sizeof charset_);
-        for(int i = 0; charset[i]; i++) {
-            charset_[(unsigned) charset[i]] = c;
-        }
+        ::memset(charset_, 0, sizeof charset_);
+        charset_[(unsigned) c1] = 1;
+        charset_[(unsigned) c2] = 1;
+        charset_[(unsigned) c3] = 1;
         charset_[0] = 0;
     }
 
@@ -266,12 +271,9 @@ struct StringSpanner
 {
     __m128i v_;
 
-    StringSpanner(const char *charset)
+    StringSpanner(char c1=0, char c2=0, char c3=0)
     {
-        __v16qi vq = {0};
-        for(int i = 0; charset[i] && i < 16; i++) {
-            vq[i] = charset[i];
-        }
+        __v16qi vq = {c1, c2, c3};
         v_ = (__m128i) vq;
     }
 
@@ -313,24 +315,13 @@ class CsvCursor
 };
 
 
-
-template<typename... Args>
-static int __attribute__((__always_inline__, target("sse4.2")))
-strcspn16(const char *buf, Args... args)
-{
-    return _mm_cmpistri(
-        (__m128i) (__v16qi) {args...},
-        _mm_loadu_si128((__m128i *) buf),
-        0
-    );
-}
-
-
 class CsvReader
 {
     public:
     StreamCursor &stream_;
     CsvCursor row_;
+    StringSpanner quoted_cell_spanner_;
+    StringSpanner unquoted_cell_spanner_;
 
     bool
     try_parse()
@@ -354,21 +345,20 @@ class CsvReader
         for(;;) {
             cell_start:
                 PREAMBLE()
-                switch(*p) {
-                case '\r':
+                if(*p == '\r') {
                     ++p;
                     goto cell_start;
-                case '"':
+                } else if(*p == quotechar_) {
                     cell_start = ++p;
                     goto in_quoted_cell;
-                default:
+                } else {
                     cell_start = p;
                     goto in_unquoted_cell;
                 }
 
             in_quoted_cell: {
                 PREAMBLE()
-                int rc = strcspn16(p, '"');
+                int rc = quoted_cell_spanner_(p);
                 switch(rc) {
                 case 16:
                     p += 16;
@@ -381,7 +371,7 @@ class CsvReader
 
             in_unquoted_cell: {
                 PREAMBLE()
-                int rc = strcspn16(p, ',', '\r', '\n');
+                int rc = unquoted_cell_spanner_(p);
                 if(rc) {
                     p += rc;
                     goto in_unquoted_cell;
@@ -403,21 +393,20 @@ class CsvReader
 
             in_escape_or_end_of_cell:
                 PREAMBLE()
-                switch(*p) {
-                case ',':
+                if(*p == delimiter_) {
                     cell->ptr = cell_start;
                     cell->size = p - cell_start - 1;
                     ++cell;
                     ++row_.count;
                     ++p;
                     goto cell_start;
-                case '\n':
+                } else if(*p == '\n') {
                     cell->ptr = cell_start;
                     cell->size = p - cell_start - 1;
                     ++row_.count;
                     p_ = p + 1;
                     return true;
-                default:
+                } else {
                     ++p;
                     goto in_quoted_cell;
                 }
@@ -465,8 +454,15 @@ class CsvReader
         return row_;
     }
 
-    CsvReader(StreamCursor &stream)
+    char delimiter_;
+    char quotechar_;
+
+    CsvReader(StreamCursor &stream, char delimiter=',', char quotechar='"')
         : stream_(stream)
+        , delimiter_(delimiter)
+        , quotechar_(quotechar)
+        , quoted_cell_spanner_(quotechar)
+        , unquoted_cell_spanner_(delimiter, '\r', '\n')
         , p_(stream.buf())
         , endp_(stream.buf() + stream.size())
     {
