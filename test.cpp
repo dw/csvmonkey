@@ -55,7 +55,7 @@ int main(int argc, char **argv)
             break;
         }
 
-        if(1) {
+        if(0) {
             if(record_type_cell->equals("LineItem")) {
                 total_cost += cost_cell->as_double();
             } else if(record_type_cell->equals("Rounding")) {
