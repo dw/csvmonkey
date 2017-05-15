@@ -421,13 +421,16 @@ build_header_map(ReaderObject *self)
 static PyObject *
 reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 {
-    static char *keywords[] = {"path", "yields", "header"};
+    static char *keywords[] = {"path", "yields", "header", "delimiter",
+        "quotechar"};
     const char *path;
     const char *yields = "row";
     int header = 1;
+    char delimiter = ',';
+    char quotechar = '"';
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "s|si:from_path", keywords,
-            &path, &yields, &header)) {
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "s|sicc:from_path", keywords,
+            &path, &yields, &header, &delimiter, &quotechar)) {
         return NULL;
     }
 
@@ -456,7 +459,7 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 
     self->cursor_type = CURSOR_MAPPED_FILE;
     self->cursor = cursor;
-    new (&(self->reader)) CsvReader(*self->cursor);
+    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar);
     if(header) {
         assert(self->reader.read_row());
     }
@@ -468,13 +471,16 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 static PyObject *
 reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
 {
-    static char *keywords[] = {"iter", "yields", "header"};
+    static char *keywords[] = {"iter", "yields", "header",
+        "delimiter", "quotechar"};
     PyObject *iterable;
     const char *yields = "row";
     int header = 1;
+    char delimiter = ',';
+    char quotechar = '"';
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|si:from_path", keywords,
-            &iterable, &yields, &header)) {
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sicc:from_iter", keywords,
+            &iterable, &yields, &header, &delimiter, &quotechar)) {
         return NULL;
     }
 
@@ -502,7 +508,7 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
     IteratorStreamCursor *cursor = new IteratorStreamCursor(iter);
     self->cursor_type = CURSOR_ITERATOR;
     self->cursor = cursor;
-    new (&(self->reader)) CsvReader(*self->cursor);
+    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar);
     if(header) {
         assert(self->reader.read_row());
     }
