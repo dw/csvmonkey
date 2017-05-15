@@ -230,6 +230,7 @@ struct StringSpanner
     size_t
     operator()(const char *s)
     {
+        // TODO: ensure this returns +16 on not found.
         const unsigned char * __restrict p = (const unsigned char *)s;
         for(;; p += 4) {
             unsigned int c0 = p[0];
@@ -341,63 +342,49 @@ class CsvReader
 
         row_.count = 0;
 
-//__builtin_prefetch(buf + pos + 16);
-//
-#define DISPATCH0(state_) { \
-    if(p >= endp_) \
+#define PREAMBLE() \
+    if(p >= endp_) {\
+        DEBUG("pos exceeds size"); \
         break; \
-    goto state_; \
-}
-
-        if(p >= endp_) {
-            DEBUG("pos exceeds size");
-            return false;
-        }
+    }
 
         DEBUG("remain = %lu", endp_ - p);
         DEBUG("ch = %d %c", (int) *p, *p);
-        //DEBUG("rest = %.10s", *p);
 
         for(;;) {
             cell_start:
-                if(*p == '\r') {
+                PREAMBLE()
+                switch(*p) {
+                case '\r':
                     ++p;
-                    DISPATCH0(cell_start)
-                } else if(*p == '"') {
+                    goto cell_start;
+                case '"':
                     cell_start = ++p;
-                    DISPATCH0(in_quoted_cell);
-                } else {
+                    goto in_quoted_cell;
+                default:
                     cell_start = p;
-                    DISPATCH0(in_unquoted_cell);
+                    goto in_unquoted_cell;
                 }
 
             in_quoted_cell: {
+                PREAMBLE()
                 int rc = strcspn16(p, '"');
-                if(rc) {
-                    p += rc;
-                    if(p >= endp_) {
-                        break;
-                    }
-
-                    int rc = strcspn16(p, '"');
-                    if(rc) {
-                        p += rc;
-                        DISPATCH0(in_quoted_cell);
-                    } else {
-                        ++p;
-                        DISPATCH0(in_escape_or_end_of_cell);
-                    }
-                } else {
-                    ++p;
-                    DISPATCH0(in_escape_or_end_of_cell);
+                switch(rc) {
+                case 16:
+                    p += 16;
+                    goto in_quoted_cell;
+                default:
+                    p += rc + 1;
+                    goto in_escape_or_end_of_cell;
                 }
             }
 
             in_unquoted_cell: {
+                PREAMBLE()
                 int rc = strcspn16(p, ',', '\r', '\n');
                 if(rc) {
                     p += rc;
-                    DISPATCH0(in_unquoted_cell);
+                    goto in_unquoted_cell;
                 } else {
                     cell->ptr = cell_start;
                     cell->size = p - cell_start;
@@ -410,30 +397,29 @@ class CsvReader
                     }
 
                     ++p;
-                    DISPATCH0(cell_start);
+                    goto cell_start;
                 }
             }
 
             in_escape_or_end_of_cell:
-                if(*p == ',') {
+                PREAMBLE()
+                switch(*p) {
+                case ',':
                     cell->ptr = cell_start;
                     cell->size = p - cell_start - 1;
                     ++cell;
                     ++row_.count;
-
                     ++p;
-                    DISPATCH0(cell_start);
-                } else if(*p == '\n') {
+                    goto cell_start;
+                case '\n':
                     cell->ptr = cell_start;
                     cell->size = p - cell_start - 1;
-                    ++cell;
                     ++row_.count;
-
                     p_ = p + 1;
                     return true;
-                } else {
+                default:
                     ++p;
-                    DISPATCH0(in_quoted_cell);
+                    goto in_quoted_cell;
                 }
         }
 
