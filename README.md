@@ -2,7 +2,7 @@
 
 This is a header-only vectorized, lazy-decoding, zero-copy CSV file parser. The
 C++ version can process ~1.7GB/sec of raw input in a single thread, the Python
-version is ~5x faster than `csv.reader` and ~13x faster than `csv.DictReader`,
+version is ~7x faster than `csv.reader` and ~18x faster than `csv.DictReader`,
 while maintaining a similarly usable interface.
 
 Requires a CPU supporting Intel SSE4.2 and a C++11 compiler that bundles
@@ -38,44 +38,32 @@ pass `yields="tuple"` or `yields="dict"` keyword arguments.
 
 ram.csv is 614MiB with 1,540,093 records of 22 columns and approximately 418 bytes per record.
 
-csvmonkey:
+| Mode                     | Xeon E5530 | Core i5-2435M |
+|--------------------------|------------|---------------|
+| csvmonkey Lazy Decode    | 0.9s       | 1.29s         |
+| csv.DictReader           | 16.3s      | 25.0s         |
+| csv.reader               | 5.88s      | 11.1s         |
+| csvmonkey yields="tuple" | 1.87s      | 2.17s         |
+| csvmonkey yields="dict"  | 4.57s      | 5.04s         |
+
+
+### Command lines
 
 ```
+# csvmonkey Lazy Decode
 $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'sum(float(row["UnBlendedCost"]) for row in csvmonkey.from_path("ram.csv"))'
-1 loops, best of 1: 1.42 sec per loop
-```
 
-csv module's DictReader:
-
-```
+# csv.DictReader
 $ python -m timeit -n 1 -r 1 -s 'import csv' 'sum(float(row["UnBlendedCost"]) for row in csv.DictReader(file("ram.csv")))'
-1 loops, best of 1: 25 sec per loop
-```
 
-Plain csv.reader with hard-coded column index:
-
-```
+# csv.reader
 $ python -m timeit -n 1 -r 1 -s 'import csv' 'r = csv.reader(file("ram.csv")); next(r); sum(float(row[20]) for row in r)'
-1 loops, best of 1: 11.1 sec per loop
-```
 
-Why? Because csvmonkey internally generates no copies or heap allocations of
-any kind during iteration. Strings are only copied to the heap when they are
-accessed, which makes jobs like the above that touch few of the available
-columns much faster than with the csv module.
-
-Even if your job requires access to all the columns as a regular tuple, performance is still good:
-
-```
+# csvmonkey yields="tuple"
 $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'sum(float(row[20]) for row in csvmonkey.from_path("ram.csv", yields="tuple"))'
-1 loops, best of 1: 2.51 sec per loop
-```
 
-And still compelling even with plain dicts:
-
-```
+# csvmonkey yields="dict"
 $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'sum(float(row["UnBlendedCost"]) for row in csvmonkey.from_path("ram.csv", yields="dict"))'
-1 loops, best of 1: 5.38 sec per loop
 ```
 
 
