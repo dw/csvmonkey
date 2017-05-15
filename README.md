@@ -38,32 +38,46 @@ pass `yields="tuple"` or `yields="dict"` keyword arguments.
 
 ram.csv is 614MiB with 1,540,093 records of 22 columns and approximately 418 bytes per record.
 
-| Mode                     | Xeon E5530 | Core i5-2435M |
-|--------------------------|------------|---------------|
-| csvmonkey Lazy Decode    | 0.9s       | 1.29s         |
-| csv.DictReader           | 16.3s      | 25.0s         |
-| csv.reader               | 5.88s      | 11.1s         |
-| csvmonkey yields="tuple" | 1.87s      | 2.17s         |
-| csvmonkey yields="dict"  | 4.57s      | 5.04s         |
-
+| Mode                     | Xeon E5530 (Sum) | Xeon E5530 (noop) | Core i5-2435M (Sum) | Core i5-2335M (noop) |
+|--------------------------|------------------|-------------------|---------------------|----------------------|
+| csvmonkey Lazy Decode    | 0.9s             | 0.444s            | 1.29s               | -                    |
+| csv.DictReader           | 16.3s            | 15.2s             | 25.0s               | -                    |
+| csv.reader               | 5.88s            | 5.31s             | 11.1s               | -                    |
+| csvmonkey yields="tuple" | 1.87s            | 1.4s              | 2.17s               | -                    |
+| csvmonkey yields="dict"  | 4.57s            | 4.26s             | 5.04s               | -                    |
 
 ### Command lines
 
 ```
-# csvmonkey Lazy Decode
+# csvmonkey Lazy Decode (Sum)
 $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'sum(float(row["UnBlendedCost"]) for row in csvmonkey.from_path("ram.csv"))'
 
-# csv.DictReader
+# csvmonkey Lazy Decode (noop)
+$ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram.csv"))'
+
+# csv.DictReader (Sum)
 $ python -m timeit -n 1 -r 1 -s 'import csv' 'sum(float(row["UnBlendedCost"]) for row in csv.DictReader(file("ram.csv")))'
 
-# csv.reader
+# csv.DictReader (noop)
+$ python -m timeit -n 1 -r 1 -s 'import csv' 'all(csv.DictReader(file("ram.csv")))'
+
+# csv.reader (Sum)
 $ python -m timeit -n 1 -r 1 -s 'import csv' 'r = csv.reader(file("ram.csv")); next(r); sum(float(row[20]) for row in r)'
 
-# csvmonkey yields="tuple"
+# csv.reader (noop)
+$ python -m timeit -n 1 -r 1 -s 'import csv' 'all(csv.reader(file("ram.csv")))'
+
+# csvmonkey yields="tuple" (Sum)
 $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'sum(float(row[20]) for row in csvmonkey.from_path("ram.csv", yields="tuple"))'
 
-# csvmonkey yields="dict"
+# csvmonkey yields="tuple" (noop)
+$ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram.csv", yields="tuple"))'
+
+# csvmonkey yields="dict" (Sum)
 $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'sum(float(row["UnBlendedCost"]) for row in csvmonkey.from_path("ram.csv", yields="dict"))'
+
+# csvmonkey yields="dict" (noop)
+$ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram.csv", yields="dict"))'
 ```
 
 
