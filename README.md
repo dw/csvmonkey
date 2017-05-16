@@ -100,3 +100,4 @@ $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram
 * `StreamCursor` error / exception propagation.
 * Remove hard 256 column limit & fix crash if it's exceeded.
 * Ensure non-SSE fallback return codes match SSE when not found.
+* Map single zero page after file pages in MappedFileCursor
