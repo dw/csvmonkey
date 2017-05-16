@@ -70,11 +70,16 @@ cell_as_double(CellObject *self)
 
 
 static PyObject *
-cell_as_str(CellObject *self)
+cell_to_str(CsvCell *cell)
 {
-    return PyString_FromStringAndSize(self->cell->ptr, self->cell->size);
+    return PyString_FromStringAndSize(cell->ptr, cell->size);
 }
 
+static PyObject *
+cell_as_str(CellObject *self)
+{
+    return cell_to_str(self->cell);
+}
 
 static PyObject *
 cell_equals(CellObject *self, PyObject *args)
@@ -423,15 +428,16 @@ static PyObject *
 reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"path", "yields", "header", "delimiter",
-        "quotechar"};
+        "quotechar", "escapechar"};
     const char *path;
     const char *yields = "row";
     int header = 1;
     char delimiter = ',';
     char quotechar = '"';
+    char escapechar = 0;
 
     if(! PyArg_ParseTupleAndKeywords(args, kw, "s|sicc:from_path", keywords,
-            &path, &yields, &header, &delimiter, &quotechar)) {
+            &path, &yields, &header, &delimiter, &quotechar, &escapechar)) {
         return NULL;
     }
 
@@ -459,7 +465,7 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 
     self->cursor_type = CURSOR_MAPPED_FILE;
     self->cursor = cursor;
-    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar);
+    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
     self->row = &self->reader.row();
     self->py_row = row_new(self);
     if(header) {
@@ -474,15 +480,16 @@ static PyObject *
 reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"iter", "yields", "header",
-        "delimiter", "quotechar"};
+        "delimiter", "quotechar", "escapechar"};
     PyObject *iterable;
     const char *yields = "row";
     int header = 1;
     char delimiter = ',';
     char quotechar = '"';
+    char escapechar = 0;
 
     if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sicc:from_iter", keywords,
-            &iterable, &yields, &header, &delimiter, &quotechar)) {
+            &iterable, &yields, &header, &delimiter, &quotechar, &escapechar)) {
         return NULL;
     }
 
@@ -509,7 +516,7 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
     IteratorStreamCursor *cursor = new IteratorStreamCursor(iter);
     self->cursor_type = CURSOR_ITERATOR;
     self->cursor = cursor;
-    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar);
+    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
     self->row = &self->reader.row();
     self->py_row = row_new(self);
     if(header) {
