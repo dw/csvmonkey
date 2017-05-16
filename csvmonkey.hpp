@@ -32,6 +32,10 @@
 #   define DEBUGON 1
 #endif
 
+
+namespace csvmonkey {
+
+
 class CsvReader;
 
 
@@ -517,3 +521,6 @@ class CsvReader
     {
     }
 };
+
+
+} // namespace csvmonkey

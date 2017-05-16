@@ -3,6 +3,8 @@
 
 #include "csvmonkey.hpp"
 
+using namespace csvmonkey;
+
 
 int main(int argc, char **argv)
 {

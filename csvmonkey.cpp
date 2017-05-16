@@ -4,6 +4,7 @@
 #include "csvmonkey.hpp"
 #include "iterator_stream_cursor.hpp"
 
+using namespace csvmonkey;
 
 extern PyTypeObject CellType;
 extern PyTypeObject ReaderType;

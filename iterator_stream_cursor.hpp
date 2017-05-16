@@ -1,6 +1,6 @@
 
 class IteratorStreamCursor
-    : public BufferedStreamCursor
+    : public csvmonkey::BufferedStreamCursor
 {
     PyObject *iter_;
 
