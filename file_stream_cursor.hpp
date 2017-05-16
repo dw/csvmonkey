@@ -1,24 +1,29 @@
 
-class IteratorStreamCursor
+class FileStreamCursor
     : public csvmonkey::BufferedStreamCursor
 {
-    PyObject *iter_;
+    PyObject *args_tuple_;
+    PyObject *read_;
 
     public:
-    IteratorStreamCursor(PyObject *iter)
+    FileStreamCursor(PyObject *read)
         : BufferedStreamCursor()
-        , iter_(iter)
+        , read_(read)
+        , args_tuple_(Py_BuildValue("(i)", 8192))
     {
+        assert(args_tuple_ != 0);
     }
 
-    ~IteratorStreamCursor()
+    ~FileStreamCursor()
     {
-        Py_DECREF(iter_);
+        Py_DECREF(args_tuple_);
+        Py_DECREF(read_);
     }
 
     virtual ssize_t readmore()
     {
-        PyObject *result = PyIter_Next(iter_);
+        PyObject *result = PyObject_Call(read_, args_tuple_, NULL);
+        DEBUG("result = %lu", result);
         if(! result) {
             return -1;
         }

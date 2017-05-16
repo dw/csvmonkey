@@ -15,7 +15,10 @@ It still requires a ton of work. For now it's mostly toy code
 
 1. `pip install -e . # or similar`
 1. `import csvmonkey`
-1. `csvmonkey.from_path()` for a memory-mapped file, `csvmonkey.from_iter()` for any iterable object that yields lines or file chunks, e.g. `from_iter(file("ram.csv"))`.
+1. `csvmonkey.from_path()` for a memory-mapped file, `csvmonkey.from_file()`
+   for any file-like object with a `read()` method, or `csvmonkey.from_iter()`
+   for any iterable object that yields lines or file chunks, e.g.
+   `from_iter(file("ram.csv"))`.
 
 By default a file header is expected and read away during construction. If your CSV lacks a header, specify `header=False`.
 

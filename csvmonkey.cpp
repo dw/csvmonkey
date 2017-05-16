@@ -3,6 +3,7 @@
 
 #include "csvmonkey.hpp"
 #include "iterator_stream_cursor.hpp"
+#include "file_stream_cursor.hpp"
 
 using namespace csvmonkey;
 
@@ -529,6 +530,58 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
 
 
 static PyObject *
+reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
+{
+    static char *keywords[] = {"fp", "yields", "header",
+        "delimiter", "quotechar", "escapechar"};
+    PyObject *fp;
+    const char *yields = "row";
+    int header = 1;
+    char delimiter = ',';
+    char quotechar = '"';
+    char escapechar = 0;
+
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sicc:from_file", keywords,
+            &fp, &yields, &header, &delimiter, &quotechar, &escapechar)) {
+        return NULL;
+    }
+
+    PyObject *py_read = PyObject_GetAttrString(fp, "read");
+    if(! py_read) {
+        DEBUG("py_read is null");
+        return NULL;
+    }
+
+    ReaderObject *self = PyObject_New(ReaderObject, &ReaderType);
+    if(! self) {
+        Py_DECREF(py_read);
+        return NULL;
+    }
+
+    self->header = header;
+    if(! strcmp(yields, "dict")) {
+        self->yields = YIELDS_DICT;
+    } else if(! strcmp(yields, "tuple")) {
+        self->yields = YIELDS_TUPLE;
+    } else {
+        self->yields = YIELDS_ROW;
+    }
+
+    FileStreamCursor *cursor = new FileStreamCursor(py_read);
+    self->cursor_type = CURSOR_ITERATOR;
+    self->cursor = cursor;
+    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
+    self->row = &self->reader.row();
+    self->py_row = row_new(self);
+    if(header) {
+        assert(self->reader.read_row());
+    }
+    build_header_map(self);
+    return (PyObject *) self;
+}
+
+
+static PyObject *
 reader_get_header(ReaderObject *self, PyObject *args)
 {
     PyObject *lst = PyList_New(PyDict_Size(self->header_map));
@@ -790,6 +843,7 @@ PyTypeObject ReaderType = {
 static struct PyMethodDef module_methods[] = {
     {"from_path", (PyCFunction) reader_from_path, METH_VARARGS|METH_KEYWORDS},
     {"from_iter", (PyCFunction) reader_from_iter, METH_VARARGS|METH_KEYWORDS},
+    {"from_file", (PyCFunction) reader_from_file, METH_VARARGS|METH_KEYWORDS},
     {0, 0, 0, 0}
 };
 
