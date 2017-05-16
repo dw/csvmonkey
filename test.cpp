@@ -45,13 +45,12 @@ int main(int argc, char **argv)
 
     while(reader.read_row()) {
         if(0 && DEBUGON && rows++ >= 160075) {
-            ENABLE_DEBUG();
             for(int i = 0; i < row.count; i++) {
                 CsvCell &cell = row.cells[i];
                 printf("%d: %i: %.*s\n", rows, i, (int)cell.size, cell.ptr);
             }
         }
-        if(DEBUGON && 0 && (++i == 4)) {
+        if(0 && (++i == 4)) {
             break;
         }
 

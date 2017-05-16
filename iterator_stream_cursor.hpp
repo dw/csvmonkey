@@ -30,13 +30,9 @@ class IteratorStreamCursor
             return -1;
         }
 
-        size_t sz = PyString_GET_SIZE(result);
-        size_t need = sz + size_;
-        if(need > buf_.size()) {
-            buf_.resize(need);
-        }
-
-        memcpy(&buf_[size_], PyString_AS_STRING(result), sz);
+        Py_ssize_t sz = PyString_GET_SIZE(result);
+        ensure(sz);
+        memcpy(&vec_[write_pos_], PyString_AS_STRING(result), sz);
         Py_DECREF(result);
         return sz;
     }

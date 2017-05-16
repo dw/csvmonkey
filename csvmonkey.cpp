@@ -440,7 +440,6 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    self->py_row = row_new(self);
     self->header = header;
     if(! strcmp(yields, "dict")) {
         self->yields = YIELDS_DICT;
@@ -462,6 +461,7 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
     self->cursor = cursor;
     new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar);
     self->row = &self->reader.row();
+    self->py_row = row_new(self);
     if(header) {
         assert(self->reader.read_row());
     }
@@ -497,7 +497,6 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    self->py_row = row_new(self);
     self->header = header;
     if(! strcmp(yields, "dict")) {
         self->yields = YIELDS_DICT;
@@ -511,6 +510,8 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
     self->cursor_type = CURSOR_ITERATOR;
     self->cursor = cursor;
     new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar);
+    self->row = &self->reader.row();
+    self->py_row = row_new(self);
     if(header) {
         assert(self->reader.read_row());
     }

@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <fcntl.h>
@@ -23,14 +24,11 @@
 
 #ifdef NDEBUG
 #   define DEBUG(x...) {}
-#   define ENABLE_DEBUG() {}
 #   define DEBUGON 0
 #   undef assert
 #   define assert(x) (x)
 #else
-static int debug;
-#   define DEBUG(x, ...) if(debug) printf(x "\n", ##__VA_ARGS__);
-#   define ENABLE_DEBUG() { debug = 1; }
+#   define DEBUG(x, ...) printf(x "\n", ##__VA_ARGS__);
 #   define DEBUGON 1
 #endif
 
@@ -47,54 +45,52 @@ class StreamCursor
      */
     virtual const char *buf() = 0;
     virtual size_t size() = 0;
-    virtual bool more(size_t shift=0) = 0;
+    virtual void consume(size_t n) = 0;
+    virtual bool fill() = 0;
 };
 
 
 class MappedFileCursor
     : public StreamCursor
 {
-    void *map_;
-    size_t mapsize_;
-    size_t remain_;
-    char *buf_;
+    char *startp_;
+    char *endp_;
+    char *p_;
 
     public:
     MappedFileCursor()
-        : map_(0)
-        , mapsize_(0)
-        , remain_(0)
-        , buf_(0)
+        : startp_(0)
+        , endp_(0)
+        , p_(0)
     {
     }
 
     ~MappedFileCursor()
     {
-        if(map_) {
-            ::munmap(map_, mapsize_);
+        if(startp_) {
+            ::munmap(startp_, endp_ - startp_);
         }
     }
 
     virtual const char *buf()
     {
-        return buf_;
+        return (char *)p_;
     }
 
     virtual size_t size()
     {
-        return remain_;
+        return endp_ - p_;
     }
 
-    virtual bool more(size_t shift=0)
+    virtual void consume(size_t n)
     {
-        if(shift > remain_) {
-            shift = remain_;
-        }
-        DEBUG("remain_ = %lu, shift = %lu", remain_, shift);
-        buf_ += remain_ - shift;
-        remain_ -= remain_ - shift;
-        DEBUG("new remain_ = %lu, shift = %lu", remain_, shift);
-        return remain_ > 0;
+        p_ += std::min(n, (size_t) (endp_ - p_));
+        DEBUG("consume(%lu); new size: %lu", n, size())
+    }
+
+    virtual bool fill()
+    {
+        return false;
     }
 
     bool open(const char *filename)
@@ -110,16 +106,15 @@ class MappedFileCursor
             return false;
         }
 
-        map_ = ::mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+        startp_ = (char *) ::mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
         ::close(fd);
-        if(map_ == NULL) {
+        if(! startp_) {
             return false;
         }
 
-        madvise(map_, st.st_size, MADV_SEQUENTIAL);
-        mapsize_ = st.st_size;
-        remain_ = st.st_size;
-        buf_ = (char *)map_;
+        madvise(startp_, st.st_size, MADV_SEQUENTIAL);
+        endp_ = startp_ + st.st_size;
+        p_ = startp_;
         return true;
     }
 };
@@ -129,41 +124,73 @@ class BufferedStreamCursor
     : public StreamCursor
 {
     protected:
-    std::vector<char> buf_;
-    std::streamsize size_;
+    std::vector<char> vec_;
+    size_t read_pos_;
+    size_t write_pos_;
+
     virtual ssize_t readmore() = 0;
 
     BufferedStreamCursor()
-        : buf_(131072)
-        , size_(0)
+        : vec_(131072)
+        , read_pos_(0)
+        , write_pos_(0)
     {
+    }
+
+    protected:
+    void ensure(size_t capacity)
+    {
+        size_t available = vec_.size() - write_pos_;
+        if(available < capacity) {
+            DEBUG("resizing vec_ %lu", (size_t)(vec_.size() + capacity));
+            vec_.resize(vec_.size() + capacity);
+        }
     }
 
     public:
     const char *buf()
     {
-        return &buf_[0];
+        return &vec_[0] + read_pos_;
     }
 
     size_t size()
     {
-        return size_;
+        return write_pos_ - read_pos_;
     }
 
-    virtual bool more(size_t shift=0)
+    virtual void consume(size_t n)
     {
-        assert(shift >= 0);
-        assert(shift <= size_);
-        memcpy(&buf_[0], (&buf_[0] + size_) - shift, shift);
-        size_ = shift;
+        read_pos_ += std::min(n, write_pos_ - read_pos_);
+        DEBUG("consume(%lu); new size: %lu", n, size())
+    }
+
+    virtual bool fill()
+    {
+        if(read_pos_) {
+            size_t n = write_pos_ - read_pos_;
+            DEBUG("read_pos_ needs adjust, it is %lu / n = %lu", read_pos_, n);
+            memcpy(&vec_[0], &vec_[read_pos_], n);
+            DEBUG("fill() adjust old write_pos = %lu", write_pos_);
+            write_pos_ -= read_pos_;
+            read_pos_ = 0;
+            DEBUG("fill() adjust new write_pos = %lu", write_pos_);
+        }
+
+        if(write_pos_ == vec_.size()) {
+            ensure(vec_.size() / 2);
+        }
 
         ssize_t rc = readmore();
         if(rc == -1) {
+            DEBUG("readmore() failed");
             return false;
         }
 
-        size_ += rc;
-        return size_;
+        DEBUG("readmore() succeeded")
+        DEBUG("fill() old write_pos = %lu", write_pos_);
+        write_pos_ += rc;
+        DEBUG("fill() new write_pos = %lu", write_pos_);
+        return write_pos_ > 0;
     }
 };
 
@@ -182,7 +209,7 @@ class FdStreamCursor
 
     virtual ssize_t readmore()
     {
-        return ::read(fd_, &buf_[0] + size_, buf_.size() - size_);
+        return ::read(fd_, &vec_[write_pos_], vec_.size() - write_pos_);
     }
 };
 
@@ -420,32 +447,24 @@ class CsvReader
         return false;
     }
 
-    bool refill()
-    {
-        size_t shift = (p_ <  endp_) ? (stream_.size() - (endp_ - p_)) : 0;
-        DEBUG("endp_ = %p  p_ = %p  shift = %ld", endp_, p_, (long) shift)
-        int rc = stream_.more(shift);
-        p_ = stream_.buf();
-        endp_ = p_ + stream_.size();
-        DEBUG("refilled rc=%d p=%p endp=%p size=%lu",
-              rc, p_, endp_, stream_.size())
-        return rc;
-    }
-
     public:
     bool
     read_row()
     {
-        if(! try_parse()) {
-            DEBUG("try_parse failed stream_.size()=%lu", stream_.size());
-            if(! refill()) {
-                DEBUG("refill failed");
-                return false;
+        DEBUG("")
+        do {
+            const char *p = stream_.buf();
+            p_ = p;
+            endp_ = p + stream_.size();
+            if(try_parse()) {
+                stream_.consume(p_ - p);
+                return true;
             }
-            DEBUG("refill succeeded, size()=%lu", stream_.size());
-            return try_parse();
-        }
-        return true;
+            DEBUG("attempting fill!")
+        } while(stream_.fill());
+
+        DEBUG("stream fill failed")
+        return false;
     }
 
     CsvCursor &
