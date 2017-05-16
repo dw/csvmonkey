@@ -91,3 +91,10 @@ $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram
 1. Invoke `read_row()` and use `row().by_value()` to pick out `CsvCell` pointers for your desired rows.
 1. Pump `read_row()` in a loop and use cell's `ptr()`, `size()`, `as_str()`, `equals()` and `as_double()` methods while `read_row()` returns true.
 
+
+
+# TODO
+
+* Fix quadratic behaviour when `StreamCursor` yields lines and CSV rows span lines
+* Python `from_file()` that uses `read()` in preference to `__iter__()`.
+* `StreamCursor` error / exception propagation.
