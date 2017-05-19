@@ -238,7 +238,7 @@ struct CsvCell
     bool escaped;
 
     public:
-    std::string as_str(char escapechar, char quotechar)
+    std::string as_str(char escapechar=0, char quotechar=0)
     {
         auto s = std::string(ptr, size);
         if(escaped) {
@@ -255,9 +255,14 @@ struct CsvCell
         return s;
     }
 
+    bool startswith(const char *str)
+    {
+        return std::string(ptr, std::min(size, strlen(str))) == str;
+    }
+
     bool equals(const char *str)
     {
-        return 0 == ::strncmp(ptr, str, size);
+        return strlen(str) == size && startswith(str);
     }
 
     double as_double()
