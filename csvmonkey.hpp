@@ -60,12 +60,14 @@ class MappedFileCursor
     char *startp_;
     char *endp_;
     char *p_;
+    void *guardp_;
 
     public:
     MappedFileCursor()
         : startp_(0)
         , endp_(0)
         , p_(0)
+        , guardp_(0)
     {
     }
 
@@ -74,11 +76,14 @@ class MappedFileCursor
         if(startp_) {
             ::munmap(startp_, endp_ - startp_);
         }
+        if(guardp_) {
+            ::munmap(guardp_, 4096);
+        }
     }
 
     virtual const char *buf()
     {
-        return (char *)p_;
+        return p_;
     }
 
     virtual size_t size()
@@ -116,6 +121,14 @@ class MappedFileCursor
             return false;
         }
 
+        void *guardp = startp_ + (st.st_size & ~4095ULL) + 4096;
+        guardp_ = ::mmap(guardp, 4096, PROT_READ, MAP_ANON|MAP_PRIVATE|MAP_FIXED, 0, 0);
+        if(guardp_ != guardp) {
+            DEBUG("could not allocate guard page at %p, got %p.",
+                guardp, guardp_)
+            return false;
+        }
+
         madvise(startp_, st.st_size, MADV_SEQUENTIAL);
         endp_ = startp_ + st.st_size;
         p_ = startp_;
@@ -147,7 +160,7 @@ class BufferedStreamCursor
         size_t available = vec_.size() - write_pos_;
         if(available < capacity) {
             DEBUG("resizing vec_ %lu", (size_t)(vec_.size() + capacity));
-            vec_.resize(vec_.size() + capacity);
+            vec_.resize(16 + (vec_.size() + capacity));
         }
     }
 
