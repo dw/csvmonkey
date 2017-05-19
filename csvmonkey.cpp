@@ -177,7 +177,7 @@ row_dealloc(RowObject *self)
 {
     self->row = NULL;
     Py_CLEAR(self->reader);
-    PyObject_Del(self);
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
 
@@ -192,12 +192,13 @@ row_traverse(RowObject *self, visitproc visit, void *arg)
 static PyObject *
 row_new(ReaderObject *reader)
 {
-    RowObject *self = (RowObject *) PyObject_New(RowObject, &RowType);
+    RowObject *self = (RowObject *) PyObject_GC_New(RowObject, &RowType);
     if(self) {
         Py_INCREF(reader);
         self->reader = reader;
     }
     self->row = reader->row;
+    PyObject_GC_Track((PyObject *) self);
     return (PyObject *) self;
 }
 
@@ -395,7 +396,7 @@ reader_dealloc(ReaderObject *self)
     default:
         assert(0);
     }
-    PyObject_Del(self);
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
 
@@ -443,7 +444,7 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    ReaderObject *self = PyObject_New(ReaderObject, &ReaderType);
+    ReaderObject *self = PyObject_GC_New(ReaderObject, &ReaderType);
     if(! self) {
         return NULL;
     }
@@ -474,6 +475,7 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         assert(self->reader.read_row());
     }
     build_header_map(self);
+    PyObject_GC_Track((PyObject *) self);
     return (PyObject *) self;
 }
 
@@ -500,7 +502,7 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    ReaderObject *self = PyObject_New(ReaderObject, &ReaderType);
+    ReaderObject *self = PyObject_GC_New(ReaderObject, &ReaderType);
     if(! self) {
         Py_DECREF(iter);
         return NULL;
@@ -525,6 +527,7 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
         assert(self->reader.read_row());
     }
     build_header_map(self);
+    PyObject_GC_Track((PyObject *) self);
     return (PyObject *) self;
 }
 
@@ -552,7 +555,7 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    ReaderObject *self = PyObject_New(ReaderObject, &ReaderType);
+    ReaderObject *self = PyObject_GC_New(ReaderObject, &ReaderType);
     if(! self) {
         Py_DECREF(py_read);
         return NULL;
@@ -577,6 +580,7 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
         assert(self->reader.read_row());
     }
     build_header_map(self);
+    PyObject_GC_Track((PyObject *) self);
     return (PyObject *) self;
 }
 
