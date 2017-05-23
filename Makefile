@@ -14,7 +14,7 @@ test: test.cpp csvmonkey.hpp Makefile
 	g++ -std=c++11 $(CXXFLAGS) -msse4.2 $(X) -g -o test test.cpp
 
 clean:
-	rm -f test
+	rm -f test cachegrind* perf.data* *.gcda
 
 pgo: X+=-DNDEBUG
 pgo:
