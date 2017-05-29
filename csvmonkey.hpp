@@ -39,6 +39,26 @@ namespace csvmonkey {
 class CsvReader;
 
 
+class Error
+{
+    std::string s_;
+
+    public:
+    Error(const char *category, const std::string &s)
+        : s_(category)
+    {
+        s_.append(": ");
+        s_.append(s);
+    }
+
+    virtual const char *
+    what() const throw()
+    {
+        return s_.c_str();
+    }
+};
+
+
 class StreamCursor
 {
     public:
@@ -102,17 +122,17 @@ class MappedFileCursor
         return false;
     }
 
-    bool open(const char *filename)
+    void open(const char *filename)
     {
         int fd = ::open(filename, O_RDONLY);
         if(fd == -1) {
-            return false;
+            throw Error(filename, strerror(errno));
         }
 
         struct stat st;
         if(fstat(fd, &st) == -1) {
             ::close(fd);
-            return false;
+            throw Error("fstat", strerror(errno));
         }
 
         // UNIX sucks. We can't use MAP_FIXED to ensure a guard page appears
@@ -143,9 +163,8 @@ class MappedFileCursor
         auto startp = (char *) mmap(0, rounded+page_size, PROT_READ,
                                     MAP_ANON|MAP_PRIVATE, 0, 0);
         if(! startp) {
-            DEBUG("could not allocate guard page")
             ::close(fd);
-            return false;
+            throw Error("mmap", "could not allocate guard page");
         }
 
         guardp_ = startp + rounded;
@@ -156,13 +175,12 @@ class MappedFileCursor
         if(startp_ != startp) {
             DEBUG("could not place data below guard page (%p) at %p, got %p.",
                   guardp_, startp, startp_);
-            return false;
+            throw Error("mmap", "could not place data below guard page");
         }
 
         ::madvise(startp_, st.st_size, MADV_SEQUENTIAL);
         endp_ = startp_ + st.st_size;
         p_ = startp_;
-        return true;
     }
 };
 

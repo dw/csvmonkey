@@ -23,7 +23,13 @@ int main(int argc, char **argv)
     CsvReader reader(stream);
 #else
     MappedFileCursor stream;
-    assert(stream.open(filename));
+
+    try {
+        stream.open(filename);
+    } catch(csvmonkey::Error &e) {
+        printf("%s\n", e.what());
+        return 1;
+    }
     CsvReader reader(stream);
 #endif
 

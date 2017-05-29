@@ -449,6 +449,8 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
+    self->py_row = NULL;
+    self->header_map = NULL;
     self->header = header;
     if(! strcmp(yields, "dict")) {
         self->yields = YIELDS_DICT;
@@ -459,9 +461,11 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
     }
 
     MappedFileCursor *cursor = new MappedFileCursor();
-    if(! cursor->open(path)) {
+    try {
+        cursor->open(path);
+    } catch(csvmonkey::Error &e) {
         delete cursor;
-        PyErr_SetString(PyExc_IOError, "Could not open file.");
+        PyErr_Format(PyExc_IOError, "%s: %s", path, e.what());
         Py_DECREF(self);
         return NULL;
     }
