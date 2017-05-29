@@ -414,12 +414,12 @@ class CsvReader
             cell_start:
                 PREAMBLE()
                 cell->escaped = false;
-                if(*p == '\r') {
-                    ++p;
-                    goto cell_start;
-                } else if(*p == quotechar_) {
+                if(*p == quotechar_) {
                     cell_start = ++p;
                     goto in_quoted_cell;
+                } else if(*p == '\r' || *p == '\n') {
+                    ++p;
+                    goto cell_start;
                 } else {
                     cell_start = p;
                     goto in_unquoted_cell;
@@ -447,7 +447,7 @@ class CsvReader
                     ++row_.count;
                     ++p;
                     goto cell_start;
-                } else if(*p == '\n') {
+                } else if(*p == '\r' || *p == '\n') {
                     cell->ptr = cell_start;
                     cell->size = p - cell_start - 1;
                     ++row_.count;
@@ -481,7 +481,7 @@ class CsvReader
                     ++row_.count;
                     ++p;
                     goto cell_start;
-                } else if(*p == '\n') {
+                } else if(*p == '\r' || *p == '\n') {
                     cell->ptr = cell_start;
                     cell->size = p - cell_start;
                     ++row_.count;
