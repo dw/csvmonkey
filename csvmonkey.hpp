@@ -60,7 +60,7 @@ class MappedFileCursor
     char *startp_;
     char *endp_;
     char *p_;
-    void *guardp_;
+    char *guardp_;
 
     public:
     MappedFileCursor()
@@ -115,21 +115,45 @@ class MappedFileCursor
             return false;
         }
 
-        startp_ = (char *) ::mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+        // UNIX sucks. We can't use MAP_FIXED to ensure a guard page appears
+        // after the file data because it'll silently overwrite mappings for
+        // unrelated stuff in RAM (causing bizarro unrelated errors and
+        // segfaults). We can't rely on the kernel's map placement behaviour
+        // because it varies depending on the size of the mapping (guard page
+        // ends up sandwiched between .so mappings, data file ends up at bottom
+        // of range with no space left before first .so). We can't parse
+        // /proc/self/maps because that sucks and is nonportable and racy. We
+        // could use random addresses pumped into posix_mem_offset() but that
+        // is insane and likely slow and non-portable and racy.
+        //
+        // So that leaves us with: make a MAP_ANON mapping the size of the
+        // datafile + the guard page, leaving the kernel to pick addresses,
+        // then use MAP_FIXED to overwrite it. We can't avoid the MAP_FIXED
+        // since there would otherwise be a race between the time we
+        // mmap/munmap to find a usable address range, and another thread
+        // performing the same operation. So here we exploit crap UNIX
+        // semantics to avoid a race.
+
+        size_t rounded = (st.st_size & ~4095ULL) + 4096;
+
+        auto startp = (char *) mmap(0, rounded+4096, PROT_READ, MAP_ANON|MAP_PRIVATE, 0, 0);
+        if(! startp) {
+            DEBUG("could not allocate guard page")
+            ::close(fd);
+            return false;
+        }
+
+        guardp_ = startp + rounded;
+        startp_ = (char *) mmap(startp, st.st_size, PROT_READ, MAP_SHARED|MAP_FIXED, fd, 0);
         ::close(fd);
-        if(! startp_) {
+
+        if(startp_ != startp) {
+            DEBUG("could not place data below guard page (%p) at %p, got %p.",
+                  guardp_, startp, startp_);
             return false;
         }
 
-        void *guardp = startp_ + (st.st_size & ~4095ULL) + 4096;
-        guardp_ = ::mmap(guardp, 4096, PROT_READ, MAP_ANON|MAP_PRIVATE|MAP_FIXED, 0, 0);
-        if(guardp_ != guardp) {
-            DEBUG("could not allocate guard page at %p, got %p.",
-                guardp, guardp_)
-            return false;
-        }
-
-        madvise(startp_, st.st_size, MADV_SEQUENTIAL);
+        ::madvise(startp_, st.st_size, MADV_SEQUENTIAL);
         endp_ = startp_ + st.st_size;
         p_ = startp_;
         return true;
