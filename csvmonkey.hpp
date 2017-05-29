@@ -134,9 +134,14 @@ class MappedFileCursor
         // performing the same operation. So here we exploit crap UNIX
         // semantics to avoid a race.
 
-        size_t rounded = (st.st_size & ~4095ULL) + 4096;
+        unsigned long page_size = sysconf(_SC_PAGESIZE);
+        unsigned long page_mask = page_size - 1;
+        size_t rounded = (st.st_size & page_mask)
+            ? ((st.st_size & ~page_mask) + page_size)
+            : st.st_size;
 
-        auto startp = (char *) mmap(0, rounded+4096, PROT_READ, MAP_ANON|MAP_PRIVATE, 0, 0);
+        auto startp = (char *) mmap(0, rounded+page_size, PROT_READ,
+                                    MAP_ANON|MAP_PRIVATE, 0, 0);
         if(! startp) {
             DEBUG("could not allocate guard page")
             ::close(fd);
@@ -144,7 +149,8 @@ class MappedFileCursor
         }
 
         guardp_ = startp + rounded;
-        startp_ = (char *) mmap(startp, st.st_size, PROT_READ, MAP_SHARED|MAP_FIXED, fd, 0);
+        startp_ = (char *) mmap(startp, st.st_size, PROT_READ,
+                                MAP_SHARED|MAP_FIXED, fd, 0);
         ::close(fd);
 
         if(startp_ != startp) {

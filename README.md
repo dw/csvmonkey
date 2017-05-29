@@ -104,5 +104,6 @@ $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram
 * Ensure non-SSE fallback return codes match SSE when not found.
 * ~~Map single zero page after file pages in MappedFileCursor~~
 * ~~Add trailing 16 NUL bytes to BufferedStreamCursor~~
+* ~~Remove hard-coded page size~~
 * (Single byte separator) Unicode support.
 * (Multi byte separator) Unicode support.
