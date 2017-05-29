@@ -92,8 +92,9 @@ class MappedFileCursor
         if(startp_) {
             ::munmap(startp_, endp_ - startp_);
         }
+        unsigned long page_size = sysconf(_SC_PAGESIZE);
         if(guardp_) {
-            ::munmap(guardp_, 4096);
+            ::munmap(guardp_, page_size);
         }
     }
 
