@@ -1,8 +1,8 @@
 
-CXXFLAGS+="-std=c++11"
-CXXFLAGS+="-O3"
-CXXFLAGS+="-DNEED_SSE42"
-CXXFLAGS+='-Wall'
+CXXFLAGS+=-std=c++11
+CXXFLAGS+=-O3
+CXXFLAGS+=-Wall
+CXXFLAGS+=-lc
 
 debug: CXXFLAGS+=-O0 -g
 debug: test
