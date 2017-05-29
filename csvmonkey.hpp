@@ -22,14 +22,10 @@
 #endif
 
 
-#ifdef NDEBUG
-#   define DEBUG(x...) {}
-#   define DEBUGON 0
-#   undef assert
-#   define assert(x) (x)
+#ifdef CSVMONKEY_DEBUG
+#   define CSM_DEBUG(x, ...) fprintf(stderr, "csvmonkey: " x "\n", ##__VA_ARGS__);
 #else
-#   define DEBUG(x, ...) printf(x "\n", ##__VA_ARGS__);
-#   define DEBUGON 1
+#   define CSM_DEBUG(x...) {}
 #endif
 
 
@@ -114,7 +110,7 @@ class MappedFileCursor
     virtual void consume(size_t n)
     {
         p_ += std::min(n, (size_t) (endp_ - p_));
-        DEBUG("consume(%lu); new size: %lu", n, size())
+        CSM_DEBUG("consume(%lu); new size: %lu", n, size())
     }
 
     virtual bool fill()
@@ -173,7 +169,7 @@ class MappedFileCursor
         ::close(fd);
 
         if(startp_ != startp) {
-            DEBUG("could not place data below guard page (%p) at %p, got %p.",
+            CSM_DEBUG("could not place data below guard page (%p) at %p, got %p.",
                   guardp_, startp, startp_);
             throw Error("mmap", "could not place data below guard page");
         }
@@ -207,7 +203,7 @@ class BufferedStreamCursor
     {
         size_t available = vec_.size() - write_pos_;
         if(available < capacity) {
-            DEBUG("resizing vec_ %lu", (size_t)(vec_.size() + capacity));
+            CSM_DEBUG("resizing vec_ %lu", (size_t)(vec_.size() + capacity));
             vec_.resize(16 + (vec_.size() + capacity));
         }
     }
@@ -226,19 +222,19 @@ class BufferedStreamCursor
     virtual void consume(size_t n)
     {
         read_pos_ += std::min(n, write_pos_ - read_pos_);
-        DEBUG("consume(%lu); new size: %lu", n, size())
+        CSM_DEBUG("consume(%lu); new size: %lu", n, size())
     }
 
     virtual bool fill()
     {
         if(read_pos_) {
             size_t n = write_pos_ - read_pos_;
-            DEBUG("read_pos_ needs adjust, it is %lu / n = %lu", read_pos_, n);
+            CSM_DEBUG("read_pos_ needs adjust, it is %lu / n = %lu", read_pos_, n);
             memcpy(&vec_[0], &vec_[read_pos_], n);
-            DEBUG("fill() adjust old write_pos = %lu", write_pos_);
+            CSM_DEBUG("fill() adjust old write_pos = %lu", write_pos_);
             write_pos_ -= read_pos_;
             read_pos_ = 0;
-            DEBUG("fill() adjust new write_pos = %lu", write_pos_);
+            CSM_DEBUG("fill() adjust new write_pos = %lu", write_pos_);
         }
 
         if(write_pos_ == vec_.size()) {
@@ -247,14 +243,14 @@ class BufferedStreamCursor
 
         ssize_t rc = readmore();
         if(rc == -1) {
-            DEBUG("readmore() failed");
+            CSM_DEBUG("readmore() failed");
             return false;
         }
 
-        DEBUG("readmore() succeeded")
-        DEBUG("fill() old write_pos = %lu", write_pos_);
+        CSM_DEBUG("readmore() succeeded")
+        CSM_DEBUG("fill() old write_pos = %lu", write_pos_);
         write_pos_ += rc;
-        DEBUG("fill() new write_pos = %lu", write_pos_);
+        CSM_DEBUG("fill() new write_pos = %lu", write_pos_);
         return write_pos_ > 0;
     }
 };
@@ -451,12 +447,12 @@ class CsvReader
 
 #define PREAMBLE() \
     if(p >= endp_) {\
-        DEBUG("pos exceeds size"); \
+        CSM_DEBUG("pos exceeds size"); \
         break; \
     }
 
-        DEBUG("remain = %lu", endp_ - p);
-        DEBUG("ch = %d %c", (int) *p, *p);
+        CSM_DEBUG("remain = %lu", endp_ - p);
+        CSM_DEBUG("ch = %d %c", (int) *p, *p);
 
         for(;;) {
             cell_start:
@@ -542,7 +538,7 @@ class CsvReader
                 }
         }
 
-        DEBUG("error out");
+        CSM_DEBUG("error out");
         return false;
     }
 
@@ -550,7 +546,7 @@ class CsvReader
     bool
     read_row()
     {
-        DEBUG("")
+        CSM_DEBUG("")
         do {
             const char *p = stream_.buf();
             p_ = p;
@@ -559,10 +555,10 @@ class CsvReader
                 stream_.consume(p_ - p);
                 return true;
             }
-            DEBUG("attempting fill!")
+            CSM_DEBUG("attempting fill!")
         } while(stream_.fill());
 
-        DEBUG("stream fill failed")
+        CSM_DEBUG("stream fill failed")
         return false;
     }
 

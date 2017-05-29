@@ -10,7 +10,6 @@ extra_compile_args += ['-w']
 #extra_compile_args += ['-DUSE_SPIRIT']
 extra_compile_args += ['-I/home/dmw/src/boost_1_64_0']
 #extra_compile_args += ['-fprofile-generate', '-lgcov']
-extra_compile_args += ['-UNDEBUG']
 extra_compile_args += ['-DNDEBUG']
 
 setup(

@@ -52,7 +52,7 @@ int main(int argc, char **argv)
     int i = 0;
 
     while(reader.read_row()) {
-        if(0 && DEBUGON && rows++ >= 160075) {
+        if(0 && rows++ >= 160075) {
             for(int i = 0; i < row.count; i++) {
                 CsvCell &cell = row.cells[i];
                 printf("%d: %i: %.*s\n", rows, i, (int)cell.size, cell.ptr);
