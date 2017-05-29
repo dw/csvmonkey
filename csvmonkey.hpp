@@ -342,33 +342,30 @@ struct StringSpanner
 
     size_t
     operator()(const char *s)
+        __attribute__((__always_inline__))
     {
-        // TODO: ensure this returns +16 on not found.
-        const unsigned char * __restrict p = (const unsigned char *)s;
-        for(;; p += 4) {
-            unsigned int c0 = p[0];
-            unsigned int c1 = p[1];
-            unsigned int c2 = p[2];
-            unsigned int c3 = p[3];
+        auto p = (const unsigned char *)s;
+        auto e = p + 16;
 
-            int t0 = charset_[c0];
-            int t1 = charset_[c1];
-            int t2 = charset_[c2];
-            int t3 = charset_[c3];
-
-            if(4 != (t0 + t1 + t2 + t3)) {
-                if(! t0) {
-                    return p - (const unsigned char *)s;
-                }
-                if(! t1) {
-                    return ((p + 1) - (const unsigned char *)s);
-                }
-                if(! t2) {
-                    return ((p + 2) - (const unsigned char *)s);
-                }
-                return ((p + 3) - (const unsigned char *)s);
+        do {
+            if(charset_[p[0]]) {
+                break;
             }
-        }
+            if(charset_[p[1]]) {
+                p++;
+                break;
+            }
+            if(charset_[p[2]]) {
+                p += 2;
+                break;
+            }
+            p += 4;
+            if(charset_[p[3]]) {
+                break;
+            }
+        } while(p < e);
+
+        return p - (const unsigned char *)s;
     }
 };
 #endif // !__SSE4_2__
