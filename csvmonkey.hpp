@@ -423,15 +423,16 @@ class CsvCursor
 
 class CsvReader
 {
-    StreamCursor &stream_;
-    CsvCursor row_;
-    StringSpanner quoted_cell_spanner_;
-    StringSpanner unquoted_cell_spanner_;
     const char *endp_;
     const char *p_;
     char delimiter_;
     char quotechar_;
     char escapechar_;
+
+    StreamCursor &stream_;
+    StringSpanner quoted_cell_spanner_;
+    StringSpanner unquoted_cell_spanner_;
+    CsvCursor row_;
 
     bool
     try_parse()
@@ -456,12 +457,12 @@ class CsvReader
             cell_start:
                 PREAMBLE()
                 cell->escaped = false;
-                if(*p == quotechar_) {
-                    cell_start = ++p;
-                    goto in_quoted_cell;
-                } else if(*p == '\r' || *p == '\n') {
+                if(*p == '\r' || *p == '\n') {
                     ++p;
                     goto cell_start;
+                } else if(*p == quotechar_) {
+                    cell_start = ++p;
+                    goto in_quoted_cell;
                 } else {
                     cell_start = p;
                     goto in_unquoted_cell;
