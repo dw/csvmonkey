@@ -10,14 +10,7 @@ using namespace csvmonkey;
 extern PyTypeObject CellType;
 extern PyTypeObject ReaderType;
 extern PyTypeObject RowType;
-
-
-enum ReaderYields
-{
-    YIELDS_ROW,
-    YIELDS_TUPLE,
-    YIELDS_DICT
-};
+struct RowObject;
 
 
 enum CursorType
@@ -33,7 +26,7 @@ struct ReaderObject
     CursorType cursor_type;
     StreamCursor *cursor;
     CsvReader reader;
-    ReaderYields yields;
+    PyObject *(*yields)(RowObject *);
     int header;
 
     CsvCursor *row;
@@ -261,6 +254,14 @@ row_asdict(RowObject *self)
 
 
 static PyObject *
+row_return_self(RowObject *self)
+{
+    Py_INCREF(self);
+    return (PyObject *) self;
+}
+
+
+static PyObject *
 row_repr(RowObject *self)
 {
     PyObject *obj;
@@ -433,11 +434,11 @@ finish_init(ReaderObject *self, const char *yields, int header,
 {
     self->header = header;
     if(! strcmp(yields, "dict")) {
-        self->yields = YIELDS_DICT;
+        self->yields = row_asdict;
     } else if(! strcmp(yields, "tuple")) {
-        self->yields = YIELDS_TUPLE;
+        self->yields = row_astuple;
     } else {
-        self->yields = YIELDS_ROW;
+        self->yields = row_return_self;
     }
 
     new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
@@ -457,7 +458,6 @@ finish_init(ReaderObject *self, const char *yields, int header,
     build_header_map(self);
     PyObject_GC_Track((PyObject *) self);
     return (PyObject *) self;
-
 }
 
 
@@ -629,27 +629,13 @@ reader_iter(PyObject *self)
 static PyObject *
 reader_iternext(ReaderObject *self)
 {
-    if(! self->reader.read_row()) {
-        if(! PyErr_Occurred()) {
-            PyErr_SetNone(PyExc_StopIteration);
-        }
-        return NULL;
+    if(self->reader.read_row()) {
+        return self->yields((RowObject *) self->py_row);
     }
-
-    PyObject *ret;
-    switch(self->yields) {
-    case YIELDS_ROW:
-        ret = self->py_row;
-        Py_INCREF(ret);
-        break;
-    case YIELDS_TUPLE:
-        ret = row_astuple((RowObject *) self->py_row);
-        break;
-    case YIELDS_DICT:
-        ret = row_asdict((RowObject *) self->py_row);
-        break;
+    if(! PyErr_Occurred()) {
+        PyErr_SetNone(PyExc_StopIteration);
     }
-    return ret;
+    return NULL;
 }
 
 
