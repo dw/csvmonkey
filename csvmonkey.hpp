@@ -369,6 +369,8 @@ struct StringSpanner
         return p - (const unsigned char *)s;
     }
 };
+
+#   define CSM_ATTR_SSE42
 #endif // !__SSE4_2__
 
 
@@ -393,6 +395,7 @@ struct StringSpanner
         );
     }
 };
+#   define CSM_ATTR_SSE42 __attribute__((target("sse4.2")))
 #endif // __SSE4_2__
 
 
@@ -436,7 +439,7 @@ class CsvReader
 
     bool
     try_parse()
-        __attribute__((target("sse4.2")))
+        CSM_ATTR_SSE42
     {
         const char *p = p_;
         const char *cell_start;
