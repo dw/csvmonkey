@@ -23,7 +23,7 @@ class FileStreamCursor
     virtual ssize_t readmore()
     {
         PyObject *result = PyObject_Call(read_, args_tuple_, NULL);
-        DEBUG("result = %lu", result);
+        CSM_DEBUG("result = %lu", result);
         if(! result) {
             return -1;
         }

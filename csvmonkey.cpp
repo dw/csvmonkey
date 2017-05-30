@@ -555,7 +555,7 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
 
     PyObject *py_read = PyObject_GetAttrString(fp, "read");
     if(! py_read) {
-        DEBUG("py_read is null");
+        CSM_DEBUG("py_read is null");
         return NULL;
     }
 
