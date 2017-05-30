@@ -16,7 +16,8 @@ struct RowObject;
 enum CursorType
 {
     CURSOR_MAPPED_FILE,
-    CURSOR_ITERATOR
+    CURSOR_ITERATOR,
+    CURSOR_PYTHON_FILE
 };
 
 
@@ -394,6 +395,9 @@ reader_dealloc(ReaderObject *self)
     case CURSOR_ITERATOR:
         delete (IteratorStreamCursor *)self->cursor;
         break;
+    case CURSOR_PYTHON_FILE:
+        delete (FileStreamCursor *)self->cursor;
+        break;
     default:
         assert(0);
     }
@@ -567,7 +571,7 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
     }
 
     self->cursor = new FileStreamCursor(py_read);
-    self->cursor_type = CURSOR_ITERATOR;
+    self->cursor_type = CURSOR_PYTHON_FILE;
     return finish_init(self, yields, header, delimiter, quotechar, escapechar);
 }
 
