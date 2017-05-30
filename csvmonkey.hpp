@@ -574,14 +574,14 @@ class CsvReader
             char delimiter=',',
             char quotechar='"',
             char escapechar=0)
-        : stream_(stream)
-        , quoted_cell_spanner_(quotechar, escapechar)
-        , unquoted_cell_spanner_(delimiter, '\r', '\n', escapechar)
-        , endp_(stream.buf() + stream.size())
+        : endp_(stream.buf() + stream.size())
         , p_(stream.buf())
         , delimiter_(delimiter)
         , quotechar_(quotechar)
         , escapechar_(escapechar)
+        , stream_(stream)
+        , quoted_cell_spanner_(quotechar, escapechar)
+        , unquoted_cell_spanner_(delimiter, '\r', '\n', escapechar)
     {
     }
 };
