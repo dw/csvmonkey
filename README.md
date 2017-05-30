@@ -97,6 +97,11 @@ $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram
 
 # TODO
 
+* Fix handling of last row when it:
+    * lacks newline, or
+    * is truncated after final quote, or
+    * is truncated within a quote, or
+    * is truncated within an escape
 * Fix quadratic behaviour when `StreamCursor` yields lines and CSV rows span lines
 * ~~Python `from_file()` that uses `read()` in preference to `__iter__()`.~~
 * ~~Fix CRLF / LFCR handling.~~
