@@ -428,6 +428,40 @@ build_header_map(ReaderObject *self)
 
 
 static PyObject *
+finish_init(ReaderObject *self, const char *yields, int header,
+            char delimiter, char quotechar, char escapechar)
+{
+    self->header = header;
+    if(! strcmp(yields, "dict")) {
+        self->yields = YIELDS_DICT;
+    } else if(! strcmp(yields, "tuple")) {
+        self->yields = YIELDS_TUPLE;
+    } else {
+        self->yields = YIELDS_ROW;
+    }
+
+    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
+    self->row = &self->reader.row();
+    self->py_row = row_new(self);
+
+    if(header) {
+        if(! self->reader.read_row()) {
+            if(! PyErr_Occurred()) {
+                PyErr_Format(PyExc_IOError, "Could not read header row");
+            }
+            Py_DECREF(self);
+            return NULL;
+        }
+    }
+
+    build_header_map(self);
+    PyObject_GC_Track((PyObject *) self);
+    return (PyObject *) self;
+
+}
+
+
+static PyObject *
 reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"path", "yields", "header", "delimiter",
@@ -451,14 +485,6 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 
     self->py_row = NULL;
     self->header_map = NULL;
-    self->header = header;
-    if(! strcmp(yields, "dict")) {
-        self->yields = YIELDS_DICT;
-    } else if(! strcmp(yields, "tuple")) {
-        self->yields = YIELDS_TUPLE;
-    } else {
-        self->yields = YIELDS_ROW;
-    }
 
     MappedFileCursor *cursor = new MappedFileCursor();
     try {
@@ -470,17 +496,9 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    self->cursor_type = CURSOR_MAPPED_FILE;
     self->cursor = cursor;
-    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
-    self->row = &self->reader.row();
-    self->py_row = row_new(self);
-    if(header) {
-        assert(self->reader.read_row());
-    }
-    build_header_map(self);
-    PyObject_GC_Track((PyObject *) self);
-    return (PyObject *) self;
+    self->cursor_type = CURSOR_MAPPED_FILE;
+    return finish_init(self, yields, header, delimiter, quotechar, escapechar);
 }
 
 
@@ -512,29 +530,12 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    self->header = header;
-    if(! strcmp(yields, "dict")) {
-        self->yields = YIELDS_DICT;
-    } else if(! strcmp(yields, "tuple")) {
-        self->yields = YIELDS_TUPLE;
-    } else {
-        self->yields = YIELDS_ROW;
-    }
-
-    IteratorStreamCursor *cursor = new IteratorStreamCursor(iter);
+    self->py_row = NULL;
+    self->header_map = NULL;
+    self->cursor = new IteratorStreamCursor(iter);
     self->cursor_type = CURSOR_ITERATOR;
-    self->cursor = cursor;
-    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
-    self->row = &self->reader.row();
-    self->py_row = row_new(self);
-    if(header) {
-        assert(self->reader.read_row());
-    }
-    build_header_map(self);
-    PyObject_GC_Track((PyObject *) self);
-    return (PyObject *) self;
+    return finish_init(self, yields, header, delimiter, quotechar, escapechar);
 }
-
 
 static PyObject *
 reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
@@ -565,27 +566,9 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    self->header = header;
-    if(! strcmp(yields, "dict")) {
-        self->yields = YIELDS_DICT;
-    } else if(! strcmp(yields, "tuple")) {
-        self->yields = YIELDS_TUPLE;
-    } else {
-        self->yields = YIELDS_ROW;
-    }
-
-    FileStreamCursor *cursor = new FileStreamCursor(py_read);
+    self->cursor = new FileStreamCursor(py_read);
     self->cursor_type = CURSOR_ITERATOR;
-    self->cursor = cursor;
-    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
-    self->row = &self->reader.row();
-    self->py_row = row_new(self);
-    if(header) {
-        assert(self->reader.read_row());
-    }
-    build_header_map(self);
-    PyObject_GC_Track((PyObject *) self);
-    return (PyObject *) self;
+    return finish_init(self, yields, header, delimiter, quotechar, escapechar);
 }
 
 
