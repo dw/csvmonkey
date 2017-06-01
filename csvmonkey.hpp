@@ -443,102 +443,137 @@ class CsvReader
     {
         const char *p = p_;
         const char *cell_start;
-        CsvCell *cell = row_.cells;
+        int rc;
 
+        CsvCell *cell = row_.cells;
         row_.count = 0;
 
-#define PREAMBLE() \
-    if(p >= endp_) {\
-        CSM_DEBUG("pos exceeds size"); \
-        break; \
-    }
-
+        #define PREAMBLE() \
+            if(p >= endp_) {\
+                CSM_DEBUG("pos exceeds size"); \
+                goto end_of_buf; \
+            } \
+            CSM_DEBUG("p = %#p; remain = %ld; next char is: %d", p, endp_-p, (int)*p) \
+            CSM_DEBUG("%d: distance to next newline: %d\n", __LINE__, strchr(p, '\n') - p);
         CSM_DEBUG("remain = %lu", endp_ - p);
         CSM_DEBUG("ch = %d %c", (int) *p, *p);
 
-        for(;;) {
-            cell_start:
-                PREAMBLE()
-                cell->escaped = false;
-                if(*p == '\r' || *p == '\n') {
-                    ++p;
-                    goto cell_start;
-                } else if(*p == quotechar_) {
-                    cell_start = ++p;
-                    goto in_quoted_cell;
-                } else {
-                    cell_start = p;
-                    goto in_unquoted_cell;
-                }
-
-            in_quoted_cell: {
-                PREAMBLE()
-                int rc = quoted_cell_spanner_(p);
-                switch(rc) {
-                case 16:
-                    p += 16;
-                    goto in_quoted_cell;
-                default:
-                    p += rc + 1;
-                    goto in_escape_or_end_of_quoted_cell;
-                }
-            }
-
-            in_escape_or_end_of_quoted_cell:
-                PREAMBLE()
-                if(*p == delimiter_) {
-                    cell->ptr = cell_start;
-                    cell->size = p - cell_start - 1;
-                    ++cell;
-                    ++row_.count;
-                    ++p;
-                    goto cell_start;
-                } else if(*p == '\r' || *p == '\n') {
-                    cell->ptr = cell_start;
-                    cell->size = p - cell_start - 1;
-                    ++row_.count;
-                    p_ = p + 1;
-                    return true;
-                } else {
-                    cell->escaped = true;
-                    ++p;
-                    goto in_quoted_cell;
-                }
-
-            in_unquoted_cell: {
-                PREAMBLE()
-                int rc = unquoted_cell_spanner_(p);
-                switch(rc) {
-                case 16:
-                    p += 16;
-                    goto in_unquoted_cell;
-                default:
-                    p += rc;
-                    goto in_escape_or_end_of_unquoted_cell;
-                }
-            }
-
-            in_escape_or_end_of_unquoted_cell:
-                PREAMBLE()
-                if(*p == delimiter_) {
-                    cell->ptr = cell_start;
-                    cell->size = p - cell_start;
-                    ++cell;
-                    ++row_.count;
-                    ++p;
-                    goto cell_start;
-                } else if(*p == '\r' || *p == '\n') {
-                    cell->ptr = cell_start;
-                    cell->size = p - cell_start;
-                    ++row_.count;
-                    p_ = p + 1;
-                    return true;
-                } else {
-                    cell->escaped = true;
-                    ++p;
-                    goto in_unquoted_cell;
-                }
+    newline_skip:
+        /*
+         * Skip newlines appearing at the start of the line, which may be a
+         * result of DOS/MAC-formatted input. Or a double-spaced CSV file.
+         */
+        PREAMBLE()
+        if(*p == '\r' || *p == '\n') {
+            ++p;
+            goto newline_skip;
         }
+
+    cell_start:
+        PREAMBLE()
+        cell->escaped = false;
+        if(*p == '\r' || *p == '\n') {
+            /*
+             * A newline appearing after at least one cell has been read
+             * indicates the presence of a single comma demarcating an unquoted
+             * unquoted unquoted unquoted empty final field.
+             */
+            cell->ptr = 0;
+            cell->size = 0;
+            ++row_.count;
+            p_ = p + 1;
+            return true;
+        } else if(*p == quotechar_) {
+            cell_start = ++p;
+            goto in_quoted_cell;
+        } else {
+            cell_start = p;
+            goto in_unquoted_cell;
+        }
+
+    in_quoted_cell:
+        PREAMBLE()
+        rc = quoted_cell_spanner_(p);
+        switch(rc) {
+            case 16:
+                p += 16;
+                goto in_quoted_cell;
+            default:
+                p += rc + 1;
+                goto in_escape_or_end_of_quoted_cell;
+            }
+
+    in_escape_or_end_of_quoted_cell:
+        PREAMBLE()
+        if(*p == delimiter_) {
+            cell->ptr = cell_start;
+            cell->size = p - cell_start - 1;
+            ++cell;
+            ++row_.count;
+            ++p;
+            goto cell_start;
+        } else if(*p == '\r' || *p == '\n') {
+            cell->ptr = cell_start;
+            cell->size = p - cell_start - 1;
+            ++row_.count;
+            p_ = p + 1;
+            return true;
+        } else {
+            cell->escaped = true;
+            ++p;
+            goto in_quoted_cell;
+        }
+
+    in_unquoted_cell:
+        CSM_DEBUG("in_unquoted_cell")
+        PREAMBLE()
+        rc = unquoted_cell_spanner_(p);
+        switch(rc) {
+        case 16:
+            p += 16;
+            goto in_unquoted_cell;
+        default:
+            p += rc;
+            goto in_escape_or_end_of_unquoted_cell;
+        }
+
+    in_escape_or_end_of_unquoted_cell:
+        PREAMBLE()
+        CSM_DEBUG("here! char = %d", *p)
+        if(*p == delimiter_) {
+            cell->ptr = cell_start;
+            cell->size = p - cell_start;
+            ++cell;
+            ++row_.count;
+            ++p;
+            CSM_DEBUG("in_escape_or_end_of_unquoted_cell(DELIMITER)")
+            CSM_DEBUG("p[..10] = '%.10s'", p)
+            CSM_DEBUG("done cell: '%.*s'", (int)cell->size, cell->ptr)
+            goto cell_start;
+        } else if(*p == '\r' || *p == '\n') {
+            CSM_DEBUG("in_escape_or_end_of_unquoted_cell(NEWLINE)")
+            cell->ptr = cell_start;
+            cell->size = p - cell_start;
+            ++row_.count;
+            p_ = p + 1;
+            return true;
+        } else {
+            cell->escaped = true;
+            ++p;
+            goto in_unquoted_cell;
+        }
+
+    end_of_buf:
+        /*
+        if(in_cell) {
+            cell->ptr = cell_start;
+            // If PREAMBLE() broke the loop that means p is invalid, so don't
+            // use it to calculate cell size.
+            cell->size = endp_ - cell_start;
+            ++row_.count;
+            p_ = endp_;
+        }
+        */
 
         CSM_DEBUG("error out");
         return false;
@@ -548,9 +583,10 @@ class CsvReader
     bool
     read_row()
     {
+        const char *p;
         CSM_DEBUG("")
         do {
-            const char *p = stream_.buf();
+            p = stream_.buf();
             p_ = p;
             endp_ = p + stream_.size();
             if(try_parse()) {
@@ -559,6 +595,12 @@ class CsvReader
             }
             CSM_DEBUG("attempting fill!")
         } while(stream_.fill());
+
+        if(row_.count) {
+            CSM_DEBUG("stream fill failed, but partial row exists")
+            stream_.consume(endp_ - p);
+            return true;
+        }
 
         CSM_DEBUG("stream fill failed")
         return false;

@@ -436,15 +436,17 @@ static PyObject *
 finish_init(ReaderObject *self, const char *yields, int header,
             char delimiter, char quotechar, char escapechar)
 {
-    self->header = header;
     if(! strcmp(yields, "dict")) {
         self->yields = row_asdict;
+        header = true;
     } else if(! strcmp(yields, "tuple")) {
         self->yields = row_astuple;
+        header = false;
     } else {
         self->yields = row_return_self;
     }
 
+    self->header = header;
     new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
     self->row = &self->reader.row();
     self->py_row = row_new(self);
@@ -540,6 +542,7 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
     self->cursor_type = CURSOR_ITERATOR;
     return finish_init(self, yields, header, delimiter, quotechar, escapechar);
 }
+
 
 static PyObject *
 reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)

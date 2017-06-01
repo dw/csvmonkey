@@ -6,9 +6,13 @@ import csvmonkey
 
 
 def parse(s):
-    sio = io.BytesIO(s)
-    it = csvmonkey.from_file(sio, yields='tuple')
-    return list(it)
+    return list(
+        csvmonkey.from_file(
+            io.BytesIO(s),
+            header=False,
+            yields='tuple'
+        )
+    )
 
 
 class BoundaryTest(unittest.TestCase):

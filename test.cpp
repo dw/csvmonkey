@@ -52,6 +52,7 @@ int main(int argc, char **argv)
     int i = 0;
 
     while(reader.read_row()) {
+        //printf("%d\n", i++);
         if(0 && rows++ >= 160075) {
             for(int i = 0; i < row.count; i++) {
                 CsvCell &cell = row.cells[i];
