@@ -431,6 +431,7 @@ class CsvReader
     char delimiter_;
     char quotechar_;
     char escapechar_;
+    bool yield_incomplete_row_;
 
     StreamCursor &stream_;
     StringSpanner quoted_cell_spanner_;
@@ -596,7 +597,7 @@ class CsvReader
             CSM_DEBUG("attempting fill!")
         } while(stream_.fill());
 
-        if(row_.count) {
+        if(row_.count && yield_incomplete_row_) {
             CSM_DEBUG("stream fill failed, but partial row exists")
             stream_.consume(endp_ - p);
             return true;
@@ -615,7 +616,8 @@ class CsvReader
     CsvReader(StreamCursor &stream,
             char delimiter=',',
             char quotechar='"',
-            char escapechar=0)
+            char escapechar=0,
+            bool yield_incomplete_row=false)
         : endp_(stream.buf() + stream.size())
         , p_(stream.buf())
         , delimiter_(delimiter)
@@ -624,6 +626,7 @@ class CsvReader
         , stream_(stream)
         , quoted_cell_spanner_(quotechar, escapechar)
         , unquoted_cell_spanner_(delimiter, '\r', '\n', escapechar)
+        , yield_incomplete_row_(yield_incomplete_row)
     {
     }
 };

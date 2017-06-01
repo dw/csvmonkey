@@ -434,7 +434,8 @@ build_header_map(ReaderObject *self)
 
 static PyObject *
 finish_init(ReaderObject *self, const char *yields, int header,
-            char delimiter, char quotechar, char escapechar)
+            char delimiter, char quotechar, char escapechar,
+            bool yield_incomplete_row)
 {
     if(! strcmp(yields, "dict")) {
         self->yields = row_asdict;
@@ -447,7 +448,8 @@ finish_init(ReaderObject *self, const char *yields, int header,
     }
 
     self->header = header;
-    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar);
+    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar,
+                                    yield_incomplete_row);
     self->row = &self->reader.row();
     self->py_row = row_new(self);
 
@@ -471,16 +473,18 @@ static PyObject *
 reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"path", "yields", "header", "delimiter",
-        "quotechar", "escapechar"};
+        "quotechar", "escapechar", "yield_incomplete_row"};
     const char *path;
     const char *yields = "row";
     int header = 1;
     char delimiter = ',';
     char quotechar = '"';
     char escapechar = 0;
+    int yield_incomplete_row = 0;
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "s|sicc:from_path", keywords,
-            &path, &yields, &header, &delimiter, &quotechar, &escapechar)) {
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "s|siccci:from_path", keywords,
+            &path, &yields, &header, &delimiter, &quotechar, &escapechar,
+            &yield_incomplete_row)) {
         return NULL;
     }
 
@@ -504,7 +508,8 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 
     self->cursor = cursor;
     self->cursor_type = CURSOR_MAPPED_FILE;
-    return finish_init(self, yields, header, delimiter, quotechar, escapechar);
+    return finish_init(self, yields, header, delimiter, quotechar, escapechar,
+                       yield_incomplete_row);
 }
 
 
@@ -512,16 +517,18 @@ static PyObject *
 reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"iter", "yields", "header",
-        "delimiter", "quotechar", "escapechar"};
+        "delimiter", "quotechar", "escapechar", "yield_incomplete_row"};
     PyObject *iterable;
     const char *yields = "row";
     int header = 1;
     char delimiter = ',';
     char quotechar = '"';
     char escapechar = 0;
+    int yield_incomplete_row = 0;
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sicc:from_iter", keywords,
-            &iterable, &yields, &header, &delimiter, &quotechar, &escapechar)) {
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|siccci:from_iter", keywords,
+            &iterable, &yields, &header, &delimiter, &quotechar, &escapechar,
+            &yield_incomplete_row)) {
         return NULL;
     }
 
@@ -540,7 +547,8 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
     self->header_map = NULL;
     self->cursor = new IteratorStreamCursor(iter);
     self->cursor_type = CURSOR_ITERATOR;
-    return finish_init(self, yields, header, delimiter, quotechar, escapechar);
+    return finish_init(self, yields, header, delimiter, quotechar, escapechar,
+                       yield_incomplete_row);
 }
 
 
@@ -548,16 +556,18 @@ static PyObject *
 reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"fp", "yields", "header",
-        "delimiter", "quotechar", "escapechar"};
+        "delimiter", "quotechar", "escapechar", "yield_incomplete_row"};
     PyObject *fp;
     const char *yields = "row";
     int header = 1;
     char delimiter = ',';
     char quotechar = '"';
     char escapechar = 0;
+    int yield_incomplete_row = 0;
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sicc:from_file", keywords,
-            &fp, &yields, &header, &delimiter, &quotechar, &escapechar)) {
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|siccci:from_file", keywords,
+            &fp, &yields, &header, &delimiter, &quotechar, &escapechar,
+            &yield_incomplete_row)) {
         return NULL;
     }
 
@@ -575,7 +585,8 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
 
     self->cursor = new FileStreamCursor(py_read);
     self->cursor_type = CURSOR_PYTHON_FILE;
-    return finish_init(self, yields, header, delimiter, quotechar, escapechar);
+    return finish_init(self, yields, header, delimiter, quotechar, escapechar,
+                       yield_incomplete_row);
 }
 
 
@@ -638,6 +649,14 @@ reader_iternext(ReaderObject *self)
 {
     if(self->reader.read_row()) {
         return self->yields((RowObject *) self->py_row);
+    }
+
+    if(self->cursor->size()) {
+        PyErr_Format(PyExc_IOError,
+            "%lu unparsed bytes at end of input. The input may be missing a "
+            "final newline, or unbalanced quotes are present.",
+            (unsigned long) self->cursor->size()
+        );
     }
     if(! PyErr_Occurred()) {
         PyErr_SetNone(PyExc_StopIteration);
