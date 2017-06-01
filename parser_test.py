@@ -16,10 +16,29 @@ def parse(s):
 
 
 class BoundaryTest(unittest.TestCase):
-    def test_col16(self):
+    def test_4094(self):
+        # parsing ends on page boundary
         c = 'x' * 4094
         s = '%s,\n' % (c,)
-        self.assertEquals([(c,)], parse(s))
+        self.assertEquals([(c,'')], parse(s))
+
+    def test_4095(self):
+        # parsing ends on first byte of new page
+        c = 'x' * 4095
+        s = '%s,\n' % (c,)
+        self.assertEquals([(c,'')], parse(s))
+
+    def test_14(self):
+        # parsing ends on 16th byte (SSE4.2)
+        c = 'x' * 14
+        s = '%s,\n' % (c,)
+        self.assertEquals([(c,'')], parse(s))
+
+    def test_15(self):
+        # parsing ends on 17th byte (SSE4.2)
+        c = 'x' * 15
+        s = '%s,\n' % (c,)
+        self.assertEquals([(c,'')], parse(s))
 
 
 class Test(unittest.TestCase):
@@ -36,7 +55,6 @@ class Test(unittest.TestCase):
         self.assertEquals([], parse('\r\n\n\r\r\r\n'))
 
     def test_unquoted_noeol(self):
-        self.skipTest('failing')
         self.assertEquals([('a', 'b')], parse('a,b'))
 
     def test_unquoted_noeol2(self):

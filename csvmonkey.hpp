@@ -433,6 +433,10 @@ class CsvReader
     char escapechar_;
     bool yield_incomplete_row_;
 
+    public:
+    bool in_newline_skip;
+
+    private:
     StreamCursor &stream_;
     StringSpanner quoted_cell_spanner_;
     StringSpanner unquoted_cell_spanner_;
@@ -464,6 +468,7 @@ class CsvReader
          * Skip newlines appearing at the start of the line, which may be a
          * result of DOS/MAC-formatted input. Or a double-spaced CSV file.
          */
+        in_newline_skip = true;
         PREAMBLE()
         if(*p == '\r' || *p == '\n') {
             ++p;
@@ -471,6 +476,7 @@ class CsvReader
         }
 
     cell_start:
+        in_newline_skip = false;
         PREAMBLE()
         cell->escaped = false;
         if(*p == '\r' || *p == '\n') {

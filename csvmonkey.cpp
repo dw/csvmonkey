@@ -651,7 +651,7 @@ reader_iternext(ReaderObject *self)
         return self->yields((RowObject *) self->py_row);
     }
 
-    if(self->cursor->size()) {
+    if(self->cursor->size() && !self->reader.in_newline_skip) {
         PyErr_Format(PyExc_IOError,
             "%lu unparsed bytes at end of input. The input may be missing a "
             "final newline, or unbalanced quotes are present.",
