@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -402,11 +403,12 @@ struct StringSpanner
 class CsvCursor
 {
     public:
-    CsvCell cells[256];
+    std::vector<CsvCell> cells;
     int count;
 
     CsvCursor()
-        : count(0)
+        : cells(32)
+        , count(0)
     {
     }
 
@@ -450,7 +452,7 @@ class CsvReader
         const char *cell_start;
         int rc;
 
-        CsvCell *cell = row_.cells;
+        CsvCell *cell = &row_.cells[0];
         row_.count = 0;
 
         #define PREAMBLE() \
@@ -515,8 +517,7 @@ class CsvReader
         if(*p == delimiter_) {
             cell->ptr = cell_start;
             cell->size = p - cell_start - 1;
-            ++cell;
-            ++row_.count;
+            cell = &row_.cells.at(++row_.count);
             ++p;
             goto cell_start;
         } else if(*p == '\r' || *p == '\n') {
@@ -550,8 +551,7 @@ class CsvReader
         if(*p == delimiter_) {
             cell->ptr = cell_start;
             cell->size = p - cell_start;
-            ++cell;
-            ++row_.count;
+            cell = &row_.cells.at(++row_.count);
             ++p;
             CSM_DEBUG("in_escape_or_end_of_unquoted_cell(DELIMITER)")
             CSM_DEBUG("p[..10] = '%.10s'", p)
@@ -592,16 +592,22 @@ class CsvReader
     {
         const char *p;
         CSM_DEBUG("")
-        do {
-            p = stream_.buf();
-            p_ = p;
-            endp_ = p + stream_.size();
-            if(try_parse()) {
-                stream_.consume(p_ - p);
-                return true;
-            }
-            CSM_DEBUG("attempting fill!")
-        } while(stream_.fill());
+
+        try {
+            do {
+                p = stream_.buf();
+                p_ = p;
+                endp_ = p + stream_.size();
+                if(try_parse()) {
+                    stream_.consume(p_ - p);
+                    return true;
+                }
+                CSM_DEBUG("attempting fill!")
+            } while(stream_.fill());
+        } catch(std::out_of_range &e) {
+            row_.cells.resize(2 * row_.cells.size());
+            return read_row();
+        }
 
         if(row_.count && yield_incomplete_row_) {
             CSM_DEBUG("stream fill failed, but partial row exists")
