@@ -8,7 +8,11 @@ faster than `csv.DictReader`, while maintaining a similarly usable interface.
 Requires a CPU supporting Intel SSE4.2 and a C++11 compiler that bundles
 `smmintrin.h`.
 
-It still requires a ton of work. For now it's mostly toy code
+It still requires a ton of work. For now it's mostly toy code.
+
+As of writing, csvmonkey very comfortably leads
+<a href="https://bitbucket.org/ewanhiggs/csv-game">Ewan Higg's csv-game</a>
+microbenchmark of 24 CSV file parsers.
 
 
 ## Python Usage
@@ -39,7 +43,10 @@ pass `yields="tuple"` or `yields="dict"` keyword arguments.
 
 ## Python Benchmark
 
-ram.csv is 614MiB with 1,540,093 records of 22 columns and approximately 418 bytes per record.
+ram.csv is 614MiB with 1,540,093 records of 22 columns and approximately 418
+bytes per record. An anonymized version can be downloaded
+<a href="https://k3.botanicus.net/tmp/anon.csv.gz">from here</a>.
+
 
 | Mode                     | Xeon E5530 (Sum) | Xeon E5530 (noop) | Core i5-2435M (Sum) | Core i5-2335M (noop) |
 |--------------------------|------------------|-------------------|---------------------|----------------------|
