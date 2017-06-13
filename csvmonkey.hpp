@@ -329,11 +329,11 @@ struct CsvCell
 
 #ifndef CSM_USE_SSE42
 #warning Using non-SSE4.2 fallback implementation.
-struct StringSpanner
+struct StringSpannerFallback
 {
     uint8_t charset_[256];
 
-    StringSpanner(char c1=0, char c2=0, char c3=0, char c4=0)
+    StringSpannerFallback(char c1=0, char c2=0, char c3=0, char c4=0)
     {
         ::memset(charset_, 0, sizeof charset_);
         charset_[(unsigned) c1] = 1;
@@ -372,16 +372,17 @@ struct StringSpanner
     }
 };
 
+using StringSpanner = StringSpannerFallback;
 #   define CSM_ATTR_SSE42
 #endif // !CSM_USE_SSE42
 
 
 #ifdef CSM_USE_SSE42
-struct StringSpanner
+struct StringSpannerSse42
 {
     __m128i v_;
 
-    StringSpanner(char c1=0, char c2=0, char c3=0, char c4=0)
+    StringSpannerSse42(char c1=0, char c2=0, char c3=0, char c4=0)
     {
         __v16qi vq = {c1, c2, c3, c4};
         v_ = (__m128i) vq;
@@ -397,6 +398,8 @@ struct StringSpanner
         );
     }
 };
+
+using StringSpanner = StringSpannerSse42;
 #   define CSM_ATTR_SSE42 __attribute__((target("sse4.2")))
 #endif // CSM_USE_SSE42
 
