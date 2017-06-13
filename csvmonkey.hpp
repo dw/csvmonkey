@@ -13,7 +13,8 @@
 #include <unistd.h>
 #include <vector>
 
-#ifdef __SSE4_2__
+#if defined(__SEE4_2__) && !defined(CSM_IGNORE_SSE42)
+#define CSM_USE_SSE42
 #include <emmintrin.h>
 #include <smmintrin.h>
 #endif // __SSE4_2__
@@ -326,7 +327,7 @@ struct CsvCell
 };
 
 
-#ifndef __SSE4_2__
+#ifndef CSM_USE_SSE42
 #warning Using non-SSE4.2 fallback implementation.
 struct StringSpanner
 {
@@ -372,10 +373,10 @@ struct StringSpanner
 };
 
 #   define CSM_ATTR_SSE42
-#endif // !__SSE4_2__
+#endif // !CSM_USE_SSE42
 
 
-#ifdef __SSE4_2__
+#ifdef CSM_USE_SSE42
 struct StringSpanner
 {
     __m128i v_;
@@ -397,7 +398,7 @@ struct StringSpanner
     }
 };
 #   define CSM_ATTR_SSE42 __attribute__((target("sse4.2")))
-#endif // __SSE4_2__
+#endif // CSM_USE_SSE42
 
 
 class CsvCursor
@@ -459,7 +460,6 @@ class CsvReader
         int rc;
 
         CsvCell *cell = &row_.cells[0];
-        CsvCell *endcell = cell + row_.cells.size();
         row_.count = 0;
 
         #define PREAMBLE() \
@@ -471,7 +471,8 @@ class CsvReader
             CSM_DEBUG("%d: distance to next newline: %d\n", __LINE__, strchr(p, '\n') - p);
 
         #define NEXT_CELL() \
-            if(++cell == endcell) {\
+            ++cell; \
+            if(row_.count == row_.cells.size()) { \
                 CSM_DEBUG("cell array overflow"); \
                 return kCsmTryParseOverflow; \
             }
@@ -531,8 +532,8 @@ class CsvReader
         if(*p == delimiter_) {
             cell->ptr = cell_start;
             cell->size = p - cell_start - 1;
-            NEXT_CELL();
             ++row_.count;
+            NEXT_CELL();
             ++p;
             goto cell_start;
         } else if(*p == '\r' || *p == '\n') {
@@ -566,8 +567,8 @@ class CsvReader
         if(*p == delimiter_) {
             cell->ptr = cell_start;
             cell->size = p - cell_start;
-            NEXT_CELL();
             ++row_.count;
+            NEXT_CELL();
             ++p;
             CSM_DEBUG("in_escape_or_end_of_unquoted_cell(DELIMITER)")
             CSM_DEBUG("p[..10] = '%.10s'", p)
