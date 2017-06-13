@@ -444,7 +444,13 @@ class CsvReader
     StringSpanner unquoted_cell_spanner_;
     CsvCursor row_;
 
-    bool
+    enum CsmTryParseReturnType {
+        kCsmTryParseOkay,
+        kCsmTryParseOverflow,
+        kCsmTryParseFailed
+    };
+
+    CsmTryParseReturnType
     try_parse()
         CSM_ATTR_SSE42
     {
@@ -453,15 +459,23 @@ class CsvReader
         int rc;
 
         CsvCell *cell = &row_.cells[0];
+        CsvCell *endcell = cell + row_.cells.size();
         row_.count = 0;
 
         #define PREAMBLE() \
             if(p >= endp_) {\
                 CSM_DEBUG("pos exceeds size"); \
-                goto end_of_buf; \
+                return kCsmTryParseFailed; \
             } \
             CSM_DEBUG("p = %#p; remain = %ld; next char is: %d", p, endp_-p, (int)*p) \
             CSM_DEBUG("%d: distance to next newline: %d\n", __LINE__, strchr(p, '\n') - p);
+
+        #define NEXT_CELL() \
+            if(++cell == endcell) {\
+                CSM_DEBUG("cell array overflow"); \
+                return kCsmTryParseOverflow; \
+            }
+
         CSM_DEBUG("remain = %lu", endp_ - p);
         CSM_DEBUG("ch = %d %c", (int) *p, *p);
 
@@ -491,7 +505,7 @@ class CsvReader
             cell->size = 0;
             ++row_.count;
             p_ = p + 1;
-            return true;
+            return kCsmTryParseOkay;
         } else if(*p == quotechar_) {
             cell_start = ++p;
             goto in_quoted_cell;
@@ -517,7 +531,8 @@ class CsvReader
         if(*p == delimiter_) {
             cell->ptr = cell_start;
             cell->size = p - cell_start - 1;
-            cell = &row_.cells.at(++row_.count);
+            NEXT_CELL();
+            ++row_.count;
             ++p;
             goto cell_start;
         } else if(*p == '\r' || *p == '\n') {
@@ -525,7 +540,7 @@ class CsvReader
             cell->size = p - cell_start - 1;
             ++row_.count;
             p_ = p + 1;
-            return true;
+            return kCsmTryParseOkay;
         } else {
             cell->escaped = true;
             ++p;
@@ -551,7 +566,8 @@ class CsvReader
         if(*p == delimiter_) {
             cell->ptr = cell_start;
             cell->size = p - cell_start;
-            cell = &row_.cells.at(++row_.count);
+            NEXT_CELL();
+            ++row_.count;
             ++p;
             CSM_DEBUG("in_escape_or_end_of_unquoted_cell(DELIMITER)")
             CSM_DEBUG("p[..10] = '%.10s'", p)
@@ -563,7 +579,7 @@ class CsvReader
             cell->size = p - cell_start;
             ++row_.count;
             p_ = p + 1;
-            return true;
+            return kCsmTryParseOkay;
         } else {
             cell->escaped = true;
             ++p;
@@ -571,20 +587,12 @@ class CsvReader
         }
 
     end_of_buf:
-        /*
-        if(in_cell) {
-            cell->ptr = cell_start;
-            // If PREAMBLE() broke the loop that means p is invalid, so don't
-            // use it to calculate cell size.
-            cell->size = endp_ - cell_start;
-            ++row_.count;
-            p_ = endp_;
-        }
-        */
-
         CSM_DEBUG("error out");
-        return false;
+        return kCsmTryParseFailed;
     }
+
+    #undef PREAMBLE
+    #undef NEXT_CELL
 
     public:
     bool
@@ -593,21 +601,22 @@ class CsvReader
         const char *p;
         CSM_DEBUG("")
 
-        try {
-            do {
-                p = stream_.buf();
-                p_ = p;
-                endp_ = p + stream_.size();
-                if(try_parse()) {
+        do {
+            p = stream_.buf();
+            p_ = p;
+            endp_ = p + stream_.size();
+            switch(try_parse()) {
+                case kCsmTryParseOkay:
                     stream_.consume(p_ - p);
                     return true;
-                }
-                CSM_DEBUG("attempting fill!")
-            } while(stream_.fill());
-        } catch(std::out_of_range &e) {
-            row_.cells.resize(2 * row_.cells.size());
-            return read_row();
-        }
+                case kCsmTryParseOverflow:
+                    row_.cells.resize(2 * row_.cells.size());
+                    return read_row();
+                case kCsmTryParseFailed:
+                    ;
+            }
+            CSM_DEBUG("attempting fill!")
+        } while(stream_.fill());
 
         if(row_.count && yield_incomplete_row_) {
             CSM_DEBUG("stream fill failed, but partial row exists")
