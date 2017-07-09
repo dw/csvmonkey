@@ -13,7 +13,7 @@
 #include <unistd.h>
 #include <vector>
 
-#if defined(__SEE4_2__) && !defined(CSM_IGNORE_SSE42)
+#if defined(__SSE4_2__) && !defined(CSM_IGNORE_SSE42)
 #define CSM_USE_SSE42
 #include <emmintrin.h>
 #include <smmintrin.h>
@@ -327,6 +327,7 @@ struct CsvCell
 };
 
 
+
 #ifndef CSM_USE_SSE42
 #warning Using non-SSE4.2 fallback implementation.
 struct StringSpannerFallback
@@ -347,6 +348,12 @@ struct StringSpannerFallback
     operator()(const char *s)
         __attribute__((__always_inline__))
     {
+        CSM_DEBUG("bitfield[32] = %d", charset_[32]);
+        CSM_DEBUG("span[0] = {%d,%d,%d,%d,%d,%d,%d,%d}",
+            s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]);
+        CSM_DEBUG("span[1] = {%d,%d,%d,%d,%d,%d,%d,%d}",
+            s[8], s[9], s[10], s[11], s[12], s[13], s[14], s[15]);
+
         auto p = (const unsigned char *)s;
         auto e = p + 16;
 
@@ -362,10 +369,11 @@ struct StringSpannerFallback
                 p += 2;
                 break;
             }
-            p += 4;
             if(charset_[p[3]]) {
+                p += 3;
                 break;
             }
+            p += 4;
         } while(p < e);
 
         return p - (const unsigned char *)s;
@@ -451,7 +459,7 @@ class CsvReader
     enum CsmTryParseReturnType {
         kCsmTryParseOkay,
         kCsmTryParseOverflow,
-        kCsmTryParseFailed
+        kCsmTryParseUnderrun
     };
 
     CsmTryParseReturnType
@@ -468,10 +476,10 @@ class CsvReader
         #define PREAMBLE() \
             if(p >= endp_) {\
                 CSM_DEBUG("pos exceeds size"); \
-                return kCsmTryParseFailed; \
+                return kCsmTryParseUnderrun; \
             } \
             CSM_DEBUG("p = %#p; remain = %ld; next char is: %d", p, endp_-p, (int)*p) \
-            CSM_DEBUG("%d: distance to next newline: %d\n", __LINE__, strchr(p, '\n') - p);
+            CSM_DEBUG("%d: distance to next newline: %d", __LINE__, strchr(p, '\n') - p);
 
         #define NEXT_CELL() \
             ++cell; \
@@ -552,9 +560,10 @@ class CsvReader
         }
 
     in_unquoted_cell:
-        CSM_DEBUG("in_unquoted_cell")
+        CSM_DEBUG("\n\nin_unquoted_cell")
         PREAMBLE()
         rc = unquoted_cell_spanner_(p);
+        CSM_DEBUG("unquoted span: %d; p[3]=%d p[..17]='%.17s'", rc, p[3], p);
         switch(rc) {
         case 16:
             p += 16;
@@ -566,16 +575,15 @@ class CsvReader
 
     in_escape_or_end_of_unquoted_cell:
         PREAMBLE()
-        CSM_DEBUG("here! char = %d", *p)
         if(*p == delimiter_) {
             cell->ptr = cell_start;
             cell->size = p - cell_start;
             ++row_.count;
+            CSM_DEBUG("in_escape_or_end_of_unquoted_cell(DELIMITER)")
+            CSM_DEBUG("p[..17] = '%.17s'", p)
+            CSM_DEBUG("done cell: '%.*s'", (int)cell->size, cell->ptr)
             NEXT_CELL();
             ++p;
-            CSM_DEBUG("in_escape_or_end_of_unquoted_cell(DELIMITER)")
-            CSM_DEBUG("p[..10] = '%.10s'", p)
-            CSM_DEBUG("done cell: '%.*s'", (int)cell->size, cell->ptr)
             goto cell_start;
         } else if(*p == '\r' || *p == '\n') {
             CSM_DEBUG("in_escape_or_end_of_unquoted_cell(NEWLINE)")
@@ -592,7 +600,7 @@ class CsvReader
 
     end_of_buf:
         CSM_DEBUG("error out");
-        return kCsmTryParseFailed;
+        return kCsmTryParseUnderrun;
     }
 
     #undef PREAMBLE
@@ -616,7 +624,7 @@ class CsvReader
                 case kCsmTryParseOverflow:
                     row_.cells.resize(2 * row_.cells.size());
                     return read_row();
-                case kCsmTryParseFailed:
+                case kCsmTryParseUnderrun:
                     ;
             }
             CSM_DEBUG("attempting fill!")
