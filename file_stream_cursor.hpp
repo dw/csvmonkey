@@ -9,7 +9,7 @@ class FileStreamCursor
     FileStreamCursor(PyObject *read)
         : BufferedStreamCursor()
         , read_(read)
-        , args_tuple_(Py_BuildValue("(i)", 8192))
+        , args_tuple_(Py_BuildValue("(i)", 65536))
     {
         assert(args_tuple_ != 0);
     }
