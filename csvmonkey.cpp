@@ -302,6 +302,10 @@ row_length(RowObject *self)
 static PyObject *
 row_getitem(RowObject *self, Py_ssize_t index)
 {
+    if(index < 0) {
+        index = self->row->count + index;
+    }
+
     if(index < 0 || index > self->row->count) {
         PyErr_Format(PyExc_IndexError,
                      "index %ld greater than parsed col count %lu",
@@ -329,6 +333,9 @@ row_subscript(RowObject *self, PyObject *key)
 
     if(PyInt_CheckExact(key)) {
         index = (int) PyInt_AS_LONG(key);
+        if(index < 0) {
+            index = self->row->count + index;
+        }
     } else {
         PyObject *py_index = PyDict_GetItem(self->reader->header_map, key);
         if(! py_index) {
@@ -338,7 +345,7 @@ row_subscript(RowObject *self, PyObject *key)
         index = (int) PyInt_AS_LONG(py_index);
     }
 
-    if(index > self->row->count) {
+    if(index < 0 || index > self->row->count) {
         PyErr_Format(PyExc_IndexError,
                      "index %ld greater than parsed col count %lu",
                      (unsigned long) index,
