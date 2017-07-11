@@ -28,6 +28,8 @@ By default a file header is expected and read away during construction. If your 
 
 By default a magical `Row` object is yielded during iteration. This object is only a window into the currently parsed data, and will become invalid upon the next iteration. Row data can be accessed either by index or by key (if `header=True`) using:
 
+If the CSV lacks a header, but dict-like behaviour is desired, pass a header field explicitly as `header=("a", "b", "c", "d")`.
+
 ```
 for row in reader:
     row[20]  # by index

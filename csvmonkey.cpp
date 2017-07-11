@@ -420,11 +420,20 @@ reader_traverse(ReaderObject *self, visitproc visit, void *arg)
 }
 
 
-static void
-build_header_map(ReaderObject *self)
+static int
+header_from_first_row(ReaderObject *self)
 {
+    if(! self->reader.read_row()) {
+        if(! PyErr_Occurred()) {
+            PyErr_Format(PyExc_IOError, "Could not read header row");
+        }
+        return -1;
+    }
+
     self->header_map = PyDict_New();
-    assert(self->header_map);
+    if(! self->header_map) {
+        return -1;
+    }
 
     CsvCell *cell = &self->row->cells[0];
     for(int i = 0; i < self->row->count; i++) {
@@ -436,41 +445,73 @@ build_header_map(ReaderObject *self)
         Py_DECREF(value);
         cell++;
     }
+
+    return 0;
+}
+
+
+static int
+header_from_sequence(ReaderObject *self, PyObject *header)
+{
+    self->header_map = PyDict_New();
+    if(! self->header_map) {
+        return -1;
+    }
+
+    Py_ssize_t length = PySequence_Length(header);
+    for(Py_ssize_t i = 0; i < length; i++) {
+        PyObject *key = PySequence_GetItem(header, i);
+        if(! key) {
+            return -1;
+        }
+
+        PyObject *value = PyInt_FromLong(i);
+        if(! value) {
+            return -1;
+        }
+
+        PyDict_SetItem(self->header_map, key, value);
+        Py_DECREF(key);
+        Py_DECREF(value);
+    }
+
+    return 0;
 }
 
 
 static PyObject *
-finish_init(ReaderObject *self, const char *yields, int header,
+finish_init(ReaderObject *self, const char *yields, PyObject *header,
             char delimiter, char quotechar, char escapechar,
             bool yield_incomplete_row)
 {
     if(! strcmp(yields, "dict")) {
         self->yields = row_asdict;
-        header = true;
     } else if(! strcmp(yields, "tuple")) {
         self->yields = row_astuple;
-        header = false;
     } else {
         self->yields = row_return_self;
     }
 
-    self->header = header;
+    self->header = PyObject_IsTrue(header);
     new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar,
                                     yield_incomplete_row);
     self->row = &self->reader.row();
     self->py_row = row_new(self);
 
-    if(header) {
-        if(! self->reader.read_row()) {
-            if(! PyErr_Occurred()) {
-                PyErr_Format(PyExc_IOError, "Could not read header row");
-            }
-            Py_DECREF(self);
+    if(self->header) {
+        int rc;
+        if(PySequence_Check(header)) {
+            rc = header_from_sequence(self, header);
+        } else {
+            rc = header_from_first_row(self);
+        }
+
+        if(rc) {
+            Py_DECREF((PyObject *) self);
             return NULL;
         }
     }
 
-    build_header_map(self);
     PyObject_GC_Track((PyObject *) self);
     return (PyObject *) self;
 }
@@ -483,13 +524,13 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         "quotechar", "escapechar", "yield_incomplete_row"};
     const char *path;
     const char *yields = "row";
-    int header = 1;
+    PyObject *header = NULL;
     char delimiter = ',';
     char quotechar = '"';
     char escapechar = 0;
     int yield_incomplete_row = 0;
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "s|siccci:from_path", keywords,
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "s|sOccci:from_path", keywords,
             &path, &yields, &header, &delimiter, &quotechar, &escapechar,
             &yield_incomplete_row)) {
         return NULL;
@@ -527,13 +568,13 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
         "delimiter", "quotechar", "escapechar", "yield_incomplete_row"};
     PyObject *iterable;
     const char *yields = "row";
-    int header = 1;
+    PyObject *header = NULL;
     char delimiter = ',';
     char quotechar = '"';
     char escapechar = 0;
     int yield_incomplete_row = 0;
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|siccci:from_iter", keywords,
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sOccci:from_iter", keywords,
             &iterable, &yields, &header, &delimiter, &quotechar, &escapechar,
             &yield_incomplete_row)) {
         return NULL;
@@ -566,13 +607,13 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
         "delimiter", "quotechar", "escapechar", "yield_incomplete_row"};
     PyObject *fp;
     const char *yields = "row";
-    int header = 1;
+    PyObject *header = NULL;
     char delimiter = ',';
     char quotechar = '"';
     char escapechar = 0;
     int yield_incomplete_row = 0;
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|siccci:from_file", keywords,
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sOccci:from_file", keywords,
             &fp, &yields, &header, &delimiter, &quotechar, &escapechar,
             &yield_incomplete_row)) {
         return NULL;
