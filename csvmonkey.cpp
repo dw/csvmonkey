@@ -492,7 +492,7 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
         self->yields = row_return_self;
     }
 
-    self->header = PyObject_IsTrue(header);
+    self->header = header && PyObject_IsTrue(header);
     new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar,
                                     yield_incomplete_row);
     self->row = &self->reader.row();
