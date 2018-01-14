@@ -327,6 +327,12 @@ struct CsvCell
 };
 
 
+struct FieldPair
+{
+    const char *name;
+    CsvCell **cell;
+};
+
 
 #ifndef CSM_USE_SSE42
 #warning Using non-SSE4.2 fallback implementation.
@@ -607,6 +613,37 @@ class CsvReader
     #undef NEXT_CELL
 
     public:
+
+    /**
+     * Extract CsvCell pointers to fields with a particular value. Used as a
+     * convenience for parsing the header row into a list of desired columns.
+     * Throws csvmonkey::Error if a desired column is not found in the row.
+     *
+     * @example
+     *      CsvCell *resource_id;
+     *      CsvCell *item_description;
+     *
+     *      if(! reader.read_row()) {
+     *          throw Error("cannot parse header row");
+     *      }
+     *
+     *      reader.extract_fields({
+     *          {"ResourceId", &resource_id},
+     *          {"ItemDescription", &item_description},
+     *      });
+     */
+    void
+    extract_fields(const std::vector<FieldPair> &pairs)
+    {
+        for(const auto &pair : pairs) {
+            if(! row_.by_value(pair.name, *pair.cell)) {
+                std::string e("Could not find required header: ");
+                e.append(pair.name);
+                throw Error("extract_fields", e);
+            }
+        }
+    }
+
     bool
     read_row()
     {
