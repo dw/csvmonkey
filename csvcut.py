@@ -37,7 +37,7 @@ readers = [
     for path in args.paths
 ]
 if not readers:
-    it = (line + '\n' for line in sys.stdin)
+    it = iter(sys.stdin.readline, '')
     readers.append(csvmonkey.from_iter(it, header=not args.no_header, yields='tuple'))
 
 
