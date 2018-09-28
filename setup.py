@@ -33,7 +33,7 @@ else:
 
 setup(
     name='csvmonkey',
-    version='0.0.1',
+    version='0.0.2',
     classifiers=[],
     url='https://github.com/dw/csvmonkey/',
     ext_modules = [
