@@ -32,11 +32,10 @@ else:
 
 
 setup(
-    name = 'csvmonkey',
-    version = '0.0.1',
-    #packages = ['csvmonkey'],
-    classifiers = [],
-    #ext_package = 'csvmonkey',
+    name='csvmonkey',
+    version='0.0.1',
+    classifiers=[],
+    url='https://github.com/dw/csvmonkey/',
     ext_modules = [
         Extension(
             name='csvmonkey',
