@@ -513,6 +513,8 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
             Py_DECREF((PyObject *) self);
             return NULL;
         }
+    } else {
+        self->header_map = NULL;
     }
 
     PyObject_GC_Track((PyObject *) self);
