@@ -336,6 +336,9 @@ row_subscript(RowObject *self, PyObject *key)
         if(index < 0) {
             index = self->row->count + index;
         }
+    } else if(! self->reader->header_map) {
+        PyErr_Format(PyExc_IndexError, "Reader instantiated with header=False");
+        return NULL;
     } else {
         PyObject *py_index = PyDict_GetItem(self->reader->header_map, key);
         if(! py_index) {
