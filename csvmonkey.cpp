@@ -644,6 +644,10 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
 static PyObject *
 reader_get_header(ReaderObject *self, PyObject *args)
 {
+    if(! self->header_map) {
+        return PyList_New(0);
+    }
+
     PyObject *lst = PyList_New(PyDict_Size(self->header_map));
     Py_ssize_t ppos = 0;
     PyObject *key;
