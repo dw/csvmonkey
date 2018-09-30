@@ -348,7 +348,7 @@ struct StringSpannerFallback
         charset_[(unsigned) c2] = 1;
         charset_[(unsigned) c3] = 1;
         charset_[(unsigned) c4] = 1;
-        charset_[0] = 0;
+        charset_[0] = 1;
     }
 
     size_t
@@ -382,6 +382,10 @@ struct StringSpannerFallback
             }
             p += 4;
         } while(p < e);
+
+        if(! *p) {
+            return 16; // PCMPISTRI reports NUL encountered as no match.
+        }
 
         return p - (const unsigned char *)s;
     }
