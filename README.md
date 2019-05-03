@@ -14,9 +14,7 @@ href="https://bitbucket.org/ewanhiggs/csv-game">Ewan Higg's csv-game</a>
 microbenchmark of 24 CSV parsers with a 30% margin.
 
 
-## How it works
-
-This parser is:
+## How It Works
 
 * **Vectorized**: scanning for byte values that influence parser state is done
   using Intel SSE 4.2's PCMPISTRI instruction. This instruction supports many
