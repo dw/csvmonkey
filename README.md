@@ -76,8 +76,8 @@ pass `yields="tuple"` or `yields="dict"` keyword arguments.
 ## Python Benchmark
 
 ram.csv is 614MiB with 1,540,093 records of 22 columns and approximately 418
-bytes per record. An anonymized version can be downloaded
-<a href="https://k3.botanicus.net/tmp/anon.csv.gz">from here</a>.
+bytes per record. An anonymized version is checked into LFS as
+``testdata/anon-ram.csv.zstd``.
 
 
 | Mode                     | Xeon E5530 (Sum) | Xeon E5530 (noop) | Core i5-2435M (Sum) | Core i5-2335M (noop) |
