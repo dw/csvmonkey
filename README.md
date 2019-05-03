@@ -1,18 +1,42 @@
 # csvmonkey
 
 This is a header-only vectorized, lazy-decoding, zero-copy CSV file parser. The
-C++ version can process ~1.7GB/sec of raw input in a single thread. For a
+C++ version can tokenize ~1.8 GiB/sec of raw input in a single thread. For a
 basic summing task, the Python version is ~7x faster than `csv.reader` and ~18x
 faster than `csv.DictReader`, while maintaining a similarly usable interface.
 
 Requires a CPU supporting Intel SSE4.2 and a C++11 compiler that bundles
-`smmintrin.h`.
+`smmintrin.h`. For non-SSE4.2 machines, a reasonable fallback implementation is
+also provided. It still requires a ton of work. For now it's mostly toy code.
 
-It still requires a ton of work. For now it's mostly toy code.
+As of writing, csvmonkey comfortably leads <a
+href="https://bitbucket.org/ewanhiggs/csv-game">Ewan Higg's csv-game</a>
+microbenchmark of 24 CSV parsers with a 30% margin.
 
-As of writing, csvmonkey very comfortably leads
-<a href="https://bitbucket.org/ewanhiggs/csv-game">Ewan Higg's csv-game</a>
-microbenchmark of 24 CSV file parsers.
+
+## How it works
+
+This parser is:
+
+* **Vectorized**: scanning for byte values that influence parser state is done
+  using Intel SSE 4.2's PCMPISTRI instruction. This instruction supports many
+  operating modes, including one that will locate the first occurence of up to
+  four distinct values within a 16 byte vector. This allows searching 16 input
+  bytes to locate the end of line, escape, quote, or field separators in a
+  single CPU instruction.
+
+* **Zero Copy**: the user is responsible for providing the memory buffers the
+  parser will search. The output of the parser is an array of column offsets
+  within a row, each containing a flag to indicate whether any escape
+  character was detected.
+
+* **Lazy Decoding**: input data is not copied or unescaped until it is
+  requested. Since a flag is stored to indicate the presence of escapes, a fast
+  path is possible that avoids any bytewise decode loop in the usual case where
+  no escape is present.
+
+* **Header Only**: the parser has no third-party dependencies, just some
+  templates defined in ``csvmonkey.hpp``.
 
 
 ## Python Usage
@@ -24,11 +48,13 @@ microbenchmark of 24 CSV file parsers.
    for any iterable object that yields lines or file chunks, e.g.
    `from_iter(file("ram.csv"))`.
 
-By default a file header is expected and read away during construction. If your CSV lacks a header, specify `header=False`.
+By default a file header is expected and read away during construction. If your
+CSV lacks a header, specify `header=False`.
 
-By default a magical `Row` object is yielded during iteration. This object is only a window into the currently parsed data, and will become invalid upon the next iteration. Row data can be accessed either by index or by key (if `header=True`) using:
-
-If the CSV lacks a header, but dict-like behaviour is desired, pass a header field explicitly as `header=("a", "b", "c", "d")`.
+By default a magical `Row` object is yielded during iteration. This object is
+only a window into the currently parsed data, and will become invalid upon the
+next iteration. Row data can be accessed either by index or by key (if
+`header=True`) using:
 
 ```
 for row in reader:
@@ -36,7 +62,11 @@ for row in reader:
     row["UnBlendedCost"]  # by header value
 ```
 
-Element access causes the relevant chunk of the row to be copied to the heap and returned as a Python string.
+Element access causes the relevant chunk of the row to be copied to the heap
+and returned as a Python string.
+
+If the CSV lacks a header, but dict-like behaviour is desired, pass a header
+field explicitly as `header=("a", "b", "c", "d")`.
 
 Rows may be converted to dicts via `row.asdict()` or tuples using
 `row.astuple()`. If you want rows to be produced directly as dict or tuple,
@@ -53,10 +83,10 @@ bytes per record. An anonymized version can be downloaded
 | Mode                     | Xeon E5530 (Sum) | Xeon E5530 (noop) | Core i5-2435M (Sum) | Core i5-2335M (noop) |
 |--------------------------|------------------|-------------------|---------------------|----------------------|
 | csvmonkey Lazy Decode    | 0.9s             | 0.444s            | 1.29s               | -                    |
-| csv.DictReader           | 16.3s            | 15.2s             | 25.0s               | -                    |
-| csv.reader               | 5.88s            | 5.31s             | 11.1s               | -                    |
 | csvmonkey yields="tuple" | 1.87s            | 1.4s              | 2.17s               | -                    |
 | csvmonkey yields="dict"  | 4.57s            | 4.26s             | 5.04s               | -                    |
+| csv.reader               | 5.88s            | 5.31s             | 11.1s               | -                    |
+| csv.DictReader           | 16.3s            | 15.2s             | 25.0s               | -                    |
 
 ### Command lines
 
@@ -111,11 +141,12 @@ $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram
     * is truncated after final quote, or
     * is truncated within a quote, or
     * is truncated within an escape
-* Fix quadratic behaviour when `StreamCursor` yields lines and CSV rows span lines
+* Restartable: fix quadratic behaviour when `StreamCursor` yields lines and CSV
+  rows span lines
 * ~~Python `from_file()` that uses `read()` in preference to `__iter__()`.~~
 * ~~Fix CRLF / LFCR handling.~~
 * ~~`StreamCursor` error / exception propagation.~~
-* Remove hard 256 column limit & fix crash if it's exceeded.
+* ~~Remove hard 256 column limit & fix crash if it's exceeded.~~
 * ~~Ensure non-SSE fallback return codes match SSE when not found.~~
 * ~~Map single zero page after file pages in MappedFileCursor~~
 * ~~Add trailing 16 NUL bytes to BufferedStreamCursor~~
