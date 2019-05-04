@@ -17,21 +17,20 @@ microbenchmark of 24 CSV parsers with a 30% margin.
 ## How It Works
 
 * **Vectorized**: scanning for byte values that influence parser state is done
-  using Intel SSE 4.2's PCMPISTRI instruction. This instruction supports many
-  operating modes, including one that will locate the first occurence of up to
-  four distinct values within a 16 byte vector. This allows searching 16 input
-  bytes to locate the end of line, escape, quote, or field separators in a
-  single CPU instruction.
+  using Intel SSE 4.2 PCMPISTRI instruction. PCMPISTRI can locate the first
+  occurence of up to four distinct values within a 16 byte vector, allowing
+  searching 16 input bytes for end of line, escape, quote, or field separators
+  in one instruction.
 
-* **Zero Copy**: the user is responsible for providing the memory buffers the
-  parser will search. The output of the parser is an array of column offsets
-  within a row, each containing a flag to indicate whether any escape
-  character was detected.
+* **Zero Copy**: the user supplies the parser's input buffers. The output of
+  is an array of column offsets within a row, each containing a flag to
+  indicate whether an escape character was detected. The highest throughput is
+  achieved in combination with memory-mapped files, where none of the OS,
+  application or parser make any bulk copies.
 
-* **Lazy Decoding**: input data is not copied or unescaped until it is
-  requested. Since a flag is stored to indicate the presence of escapes, a fast
-  path is possible that avoids any bytewise decode loop in the usual case where
-  no escape is present.
+* **Lazy Decoding**: input is not copied or unescaped until it is requested.
+  Since a flag indicates the presence of escapes, a fast path is possible that
+  avoids any bytewise decode in the usual case where no escape is present.
 
 * **Header Only**: the parser has no third-party dependencies, just some
   templates defined in ``csvmonkey.hpp``.
