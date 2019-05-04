@@ -71,6 +71,24 @@ Rows may be converted to dicts via `row.asdict()` or tuples using
 pass `yields="tuple"` or `yields="dict"` keyword arguments.
 
 
+### Unicode Support
+
+Unicode is supported for character sets where delimiters and line endings are
+represented by one byte. Columns default to being returned as ``bytes``. To
+enable Unicode support, pass an ``encoding`` parameter, and optionally an
+``errors`` parameter.
+
+* ``None``, "bytes": Return bytes (default)
+* "utf-8": Decode as UTF-8
+* "ascii": Decode as ASCII
+* "latin1": Decode as LATIN1
+* "locale": Decode according to the active C locale
+* "...": Decode according some codec "..." known to Python
+
+Where possible, prefer exact spelling and case matching one of the above
+encodings, to ensure an associated fast path is used.
+
+
 ## Python Benchmark
 
 ram.csv is 614MiB with 1,540,093 records of 22 columns and approximately 418
@@ -128,7 +146,7 @@ $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram
 1. See `Makefile` for an example of producing a profile-guided build (worth an
    extra few %).
 1. Instantiate `MappedFileCursor` (zero copy) or `FdStreamCursor` (buffered), attach it to a `CsvReader`.
-1. Invoke `read_row()` and use `row().by_value()` to pick out `CsvCell` pointers for your desired rows.
+1. Invoke `read_row()` and use `row().by_value()` to pick out `CsvCell` pointers for your desired columns.
 1. Pump `read_row()` in a loop and use cell's `ptr()`, `size()`, `as_str()`, `equals()` and `as_double()` methods while `read_row()` returns true.
 
 
@@ -149,5 +167,5 @@ $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram
 * ~~Map single zero page after file pages in MappedFileCursor~~
 * ~~Add trailing 16 NUL bytes to BufferedStreamCursor~~
 * ~~Remove hard-coded page size~~
-* (Single byte separator) Unicode support.
+* ~~(Single byte separator) Unicode support.~~
 * (Multi byte separator) Unicode support.

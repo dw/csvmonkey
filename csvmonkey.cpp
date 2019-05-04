@@ -157,8 +157,9 @@ cell_equals(CellObject *self, PyObject *args)
 
 
 static int
-cell_compare(CellObject *self, PyObject *o2)
+cell_compare(PyObject *self_, PyObject *o2)
 {
+    CellObject *self = (CellObject *) self_;
     if(! PyBytes_CheckExact(o2)) {
         return -1;
     }
@@ -169,8 +170,9 @@ cell_compare(CellObject *self, PyObject *o2)
 
 
 static PyObject *
-cell_richcmp(CellObject *self, PyObject *o2, int op)
+cell_richcmp(PyObject *self_, PyObject *o2, int op)
 {
+    CellObject *self = (CellObject *) self_;
     if(! PyBytes_CheckExact(o2)) {
         return NULL;
     }
@@ -202,8 +204,9 @@ cell_new(ReaderObject *reader, CsvCell *cell)
 
 
 static void
-cell_dealloc(CellObject *self)
+cell_dealloc(PyObject *self_)
 {
+    CellObject *self = (CellObject *) self_;
     Py_DECREF(self->reader);
     self->reader = NULL;
     self->cell = NULL;
@@ -830,44 +833,16 @@ static PyMethodDef cell_methods[] = {
 
 PyTypeObject CellType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_Cell",                    /*tp_name*/
-    sizeof(CellObject),         /*tp_basicsize*/
-    0,                          /*tp_itemsize*/
-    (destructor) cell_dealloc,  /*tp_dealloc*/
-    0,                          /*tp_print*/
-    0,                          /*tp_getattr*/
-    0,                          /*tp_setattr*/
-    (cmpfunc) cell_compare,     /*tp_compare*/
-    0,                          /*tp_repr*/
-    0,                          /*tp_as_number*/
-    0,                          /*tp_as_sequence*/
-    0,                          /*tp_as_mapping*/
-    0,                          /*tp_hash*/
-    0,                          /*tp_call*/
-    0,                          /*tp_str*/
-    0,                          /*tp_getattro*/
-    0,                          /*tp_setattro*/
-    0,                          /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT,         /*tp_flags*/
-    "csvmonkey._Cell",           /*tp_doc*/
-    0,                          /*tp_traverse*/
-    0,                          /*tp_clear*/
-    (richcmpfunc) cell_richcmp, /*tp_richcompare*/
-    0,                          /*tp_weaklistoffset*/
-    0,                          /*tp_iter*/
-    0,                          /*tp_iternext*/
-    cell_methods,               /*tp_methods*/
-    0,                          /*tp_members*/
-    0,                          /*tp_getset*/
-    0,                          /*tp_base*/
-    0,                          /*tp_dict*/
-    0,                          /*tp_descr_get*/
-    0,                          /*tp_descr_set*/
-    0,                          /*tp_dictoffset*/
-    0,                          /*tp_init*/
-    0,                          /*tp_alloc*/
-    0,                          /*tp_new*/
-    0,                          /*tp_free*/
+    .tp_name = "_Cell",
+    .tp_basicsize = sizeof(CellObject),
+    .tp_dealloc = cell_dealloc,
+#if PY_MAJOR_VERSION < 3
+    .tp_compare = cell_compare,
+#endif
+    .tp_flags=Py_TPFLAGS_DEFAULT,
+    .tp_doc="csvmonkey._Cell",
+    .tp_richcompare=cell_richcmp,
+    .tp_methods=cell_methods,
 };
 
 
@@ -1002,26 +977,51 @@ static struct PyMethodDef module_methods[] = {
     {0, 0, 0, 0}
 };
 
+#if PY_MAJOR_VERSION >= 3
+static struct PyModuleDef moduledef = {
+    PyModuleDef_HEAD_INIT,
+    "csvmonkey",
+    NULL,
+    -1,
+    module_methods,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
+#   define MOD_RETURN(mod) return mod;
+#   define MODINIT_NAME PyInit_csvmonkey
+#else
+#   define MODINIT_NAME initcsvmonkey
+#   define MOD_RETURN(mod) return
+#endif
+
 
 PyMODINIT_FUNC
-initcsvmonkey(void)
+MODINIT_NAME(void)
 {
     static PyTypeObject *types[] = {
         &CellType, &RowType, &ReaderType
     };
 
+#if PY_MAJOR_VERSION >= 3
+    PyObject *mod = PyModule_Create(&moduledef);
+#else
     PyObject *mod = Py_InitModule3("csvmonkey", module_methods, "");
+#endif
     if(! mod) {
-        return;
+        MOD_RETURN(NULL);
     }
 
     for(int i = 0; i < (sizeof types / sizeof types[0]); i++) {
         PyTypeObject *type = types[i];
         if(PyType_Ready(type)) {
-            return;
+            MOD_RETURN(NULL);
         }
         if(PyModule_AddObject(mod, type->tp_name, (PyObject *)type)) {
-            return;
+            MOD_RETURN(NULL);
         }
     }
+
+    MOD_RETURN(mod);
 }
