@@ -411,12 +411,13 @@ using StringSpanner = StringSpannerFallback;
 
 
 #ifdef CSM_USE_SSE42
-struct StringSpannerSse42
+struct alignas(16) StringSpannerSse42
 {
     __m128i v_;
 
     StringSpannerSse42(char c1=0, char c2=0, char c3=0, char c4=0)
     {
+        assert(! ((reinterpret_cast<intptr_t>(&v_) & 15)));
         __v16qi vq = {c1, c2, c3, c4};
         v_ = (__m128i) vq;
     }
@@ -464,7 +465,7 @@ class CsvCursor
 
 
 template<class StreamCursorType>
-class CsvReader
+class alignas(16) CsvReader
 {
     const char *endp_;
     const char *p_;
