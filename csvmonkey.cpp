@@ -27,11 +27,16 @@ struct ReaderObject
     CursorType cursor_type;
     StreamCursor *cursor;
     CsvReader<> reader;
+    PyObject *(*to_string)(struct ReaderObject *, CsvCell *);
     PyObject *(*yields)(RowObject *);
     int header;
 
     CsvCursor *row;
     PyObject *py_row;
+
+    // Unicode.
+    const char *encoding; // unused unless to_string==cell_to_unicode
+    const char *errors; // "strict", "ignore", "..."
 
     // Map header string -> index.
     PyObject *header_map;
@@ -55,6 +60,62 @@ struct RowObject
 
 
 /*
+ * String factories.
+ */
+
+#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 3
+#   define HAS_LOCALE
+#endif
+
+
+static PyObject *
+cell_to_bytes(ReaderObject *reader, CsvCell *cell)
+{
+    return PyBytes_FromStringAndSize(cell->ptr, cell->size);
+}
+
+
+static PyObject *
+cell_to_utf8(ReaderObject *reader, CsvCell *cell)
+{
+    return PyUnicode_DecodeUTF8(cell->ptr, cell->size, reader->errors);
+}
+
+
+static PyObject *
+cell_to_ascii(ReaderObject *reader, CsvCell *cell)
+{
+    return PyUnicode_DecodeASCII(cell->ptr, cell->size, reader->errors);
+}
+
+
+static PyObject *
+cell_to_latin1(ReaderObject *reader, CsvCell *cell)
+{
+    return PyUnicode_DecodeLatin1(cell->ptr, cell->size, reader->errors);
+}
+
+
+#ifdef HAS_LOCALE
+static PyObject *
+cell_to_locale(ReaderObject *reader, CsvCell *cell)
+{
+    return PyUnicode_DecodeLocaleAndSize(cell->ptr, cell->size, reader->errors);
+}
+#endif
+
+
+static PyObject *
+cell_to_unicode(ReaderObject *reader, CsvCell *cell)
+{
+    return PyUnicode_Decode(
+        cell->ptr, cell->size,
+        reader->encoding, reader->errors
+    );
+}
+
+
+/*
  * Cell methods.
  */
 
@@ -66,15 +127,10 @@ cell_as_double(CellObject *self)
 
 
 static PyObject *
-cell_to_str(CsvCell *cell)
-{
-    return PyString_FromStringAndSize(cell->ptr, cell->size);
-}
-
-static PyObject *
 cell_as_str(CellObject *self)
 {
-    return cell_to_str(self->cell);
+    ReaderObject *r = self->reader;
+    return r->to_string(r, self->cell);
 }
 
 static PyObject *
@@ -85,11 +141,11 @@ cell_equals(CellObject *self, PyObject *args)
     }
 
     PyObject *py_s = PyTuple_GET_ITEM(args, 0);
-    if(! PyString_CheckExact(py_s)) {
+    if(! PyBytes_CheckExact(py_s)) {
         return NULL;
     }
 
-    const char *s = PyString_AS_STRING(py_s);
+    const char *s = PyBytes_AS_STRING(py_s);
     PyObject *py_true = (
         self->cell->equals(s) ?
         Py_True :
@@ -103,11 +159,11 @@ cell_equals(CellObject *self, PyObject *args)
 static int
 cell_compare(CellObject *self, PyObject *o2)
 {
-    if(! PyString_CheckExact(o2)) {
+    if(! PyBytes_CheckExact(o2)) {
         return -1;
     }
 
-    const char *s = PyString_AS_STRING(o2);
+    const char *s = PyBytes_AS_STRING(o2);
     return self->cell->equals(s) ? 0 : -1;
 }
 
@@ -115,13 +171,13 @@ cell_compare(CellObject *self, PyObject *o2)
 static PyObject *
 cell_richcmp(CellObject *self, PyObject *o2, int op)
 {
-    if(! PyString_CheckExact(o2)) {
+    if(! PyBytes_CheckExact(o2)) {
         return NULL;
     }
 
     PyObject *out = Py_NotImplemented;
     if(op == Py_EQ) {
-        const char *s = PyString_AS_STRING(o2);
+        const char *s = PyBytes_AS_STRING(o2);
         out = self->cell->equals(s) ? Py_True : Py_False;
     }
 
@@ -206,7 +262,7 @@ row_astuple(RowObject *self)
         CsvCell *cell = &self->row->cells[0];
 
         for(int i = 0; i < count; i++, cell++) {
-            PyObject *s = PyString_FromStringAndSize(cell->ptr, cell->size);
+            PyObject *s = PyBytes_FromStringAndSize(cell->ptr, cell->size);
             if(! s) {
                 Py_CLEAR(tup);
                 break;
@@ -230,9 +286,9 @@ row_asdict(RowObject *self)
 
         CsvCell *cells = &self->row->cells[0];
         while(PyDict_Next(self->reader->header_map, &ppos, &key, &value)) {
-            int i = PyInt_AS_LONG(value);
+            int i = PyLong_AsLong(value);
             if(i < self->row->count) {
-                PyObject *s = PyString_FromStringAndSize(
+                PyObject *s = PyBytes_FromStringAndSize(
                     cells[i].ptr, cells[i].size);
                 if(! s) {
                     Py_CLEAR(out);
@@ -283,9 +339,9 @@ row_repr(RowObject *self)
         return NULL;
     }
 
-    PyObject *repr = PyString_FromFormat(
+    PyObject *repr = PyUnicode_FromFormat(
         "<csvmonkey._Row positioned at %s>",
-        PyString_AsString(obj_repr)
+        PyBytes_AsString(obj_repr)
     );
     Py_DECREF(obj_repr);
     return repr;
@@ -314,8 +370,8 @@ row_getitem(RowObject *self, Py_ssize_t index)
         return NULL;
     }
 
-    CsvCell &cell = self->row->cells[index];
-    return PyString_FromStringAndSize(cell.ptr, cell.size);
+    ReaderObject *r = self->reader;
+    return r->to_string(r, &self->row->cells[index]);
 }
 
 
@@ -331,11 +387,18 @@ row_subscript(RowObject *self, PyObject *key)
 {
     int index;
 
-    if(PyInt_CheckExact(key)) {
+    if(PyLong_Check(key)) {
+        index = (int) PyLong_AsLong(key);
+        if(index < 0) {
+            index = self->row->count + index;
+        }
+#if PY_MAJOR_VERSION < 3
+    } else if(PyInt_Check(key)) {
         index = (int) PyInt_AS_LONG(key);
         if(index < 0) {
             index = self->row->count + index;
         }
+#endif
     } else if(! self->reader->header_map) {
         PyErr_Format(PyExc_IndexError, "Reader instantiated with header=False");
         return NULL;
@@ -345,7 +408,7 @@ row_subscript(RowObject *self, PyObject *key)
             PyErr_Format(PyExc_KeyError, "No such key.");
             return NULL;
         }
-        index = (int) PyInt_AS_LONG(py_index);
+        index = (int) PyLong_AsLong(py_index);
     }
 
     if(index < 0 || index > self->row->count) {
@@ -356,8 +419,8 @@ row_subscript(RowObject *self, PyObject *key)
         return NULL;
     }
 
-    CsvCell *cell = &self->row->cells[index];
-    return PyString_FromStringAndSize(cell->ptr, cell->size);
+    ReaderObject *r = self->reader;
+    return r->to_string(r, &self->row->cells[index]);
 }
 
 
@@ -440,8 +503,8 @@ header_from_first_row(ReaderObject *self)
 
     CsvCell *cell = &self->row->cells[0];
     for(int i = 0; i < self->row->count; i++) {
-        PyObject *key = PyString_FromStringAndSize(cell->ptr, cell->size);
-        PyObject *value = PyInt_FromLong(i);
+        PyObject *key = PyBytes_FromStringAndSize(cell->ptr, cell->size);
+        PyObject *value = PyLong_FromLong(i);
         assert(key && value);
         PyDict_SetItem(self->header_map, key, value);
         Py_DECREF(key);
@@ -468,7 +531,7 @@ header_from_sequence(ReaderObject *self, PyObject *header)
             return -1;
         }
 
-        PyObject *value = PyInt_FromLong(i);
+        PyObject *value = PyLong_FromLong(i);
         if(! value) {
             return -1;
         }
@@ -485,7 +548,8 @@ header_from_sequence(ReaderObject *self, PyObject *header)
 static PyObject *
 finish_init(ReaderObject *self, const char *yields, PyObject *header,
             char delimiter, char quotechar, char escapechar,
-            bool yield_incomplete_row)
+            bool yield_incomplete_row,
+            const char *encoding, const char *errors)
 {
     if(! strcmp(yields, "dict")) {
         self->yields = row_asdict;
@@ -517,6 +581,27 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
         self->header_map = NULL;
     }
 
+    self->encoding = NULL;
+    self->errors = errors;
+    if((! encoding) || (! strcmp(encoding, "bytes"))) {
+        self->to_string = cell_to_bytes;
+    } else if(! strcmp(encoding, "utf-8")) {
+        self->to_string = cell_to_utf8;
+    } else if(! strcmp(encoding, "ascii")) {
+        self->to_string = cell_to_ascii;
+    } else if(! strcmp(encoding, "utf-8")) {
+        self->to_string = cell_to_ascii;
+    } else if(! strcmp(encoding, "latin1")) {
+        self->to_string = cell_to_latin1;
+#ifdef HAS_LOCALE
+    } else if(! strcmp(encoding, "locale")) {
+        self->to_string = cell_to_locale;
+#endif
+    } else {
+        self->encoding = encoding;
+        self->to_string = cell_to_unicode;
+    }
+
     PyObject_GC_Track((PyObject *) self);
     return (PyObject *) self;
 }
@@ -526,7 +611,8 @@ static PyObject *
 reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"path", "yields", "header", "delimiter",
-        "quotechar", "escapechar", "yield_incomplete_row"};
+        "quotechar", "escapechar", "yield_incomplete_row",
+        "encoding", "errors"};
     const char *path;
     const char *yields = "row";
     PyObject *header = NULL;
@@ -534,10 +620,12 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
     char quotechar = '"';
     char escapechar = 0;
     int yield_incomplete_row = 0;
+    const char *encoding = 0;
+    const char *errors = 0;
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "s|sOccci:from_path", keywords,
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "s|sOccciss:from_path", keywords,
             &path, &yields, &header, &delimiter, &quotechar, &escapechar,
-            &yield_incomplete_row)) {
+            &yield_incomplete_row, &encoding, &errors)) {
         return NULL;
     }
 
@@ -562,7 +650,7 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
     self->cursor = cursor;
     self->cursor_type = CURSOR_MAPPED_FILE;
     return finish_init(self, yields, header, delimiter, quotechar, escapechar,
-                       yield_incomplete_row);
+                       yield_incomplete_row, encoding, errors);
 }
 
 
@@ -570,7 +658,8 @@ static PyObject *
 reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"iter", "yields", "header",
-        "delimiter", "quotechar", "escapechar", "yield_incomplete_row"};
+        "delimiter", "quotechar", "escapechar", "yield_incomplete_row",
+        "encoding", "errors"};
     PyObject *iterable;
     const char *yields = "row";
     PyObject *header = NULL;
@@ -578,10 +667,13 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
     char quotechar = '"';
     char escapechar = 0;
     int yield_incomplete_row = 0;
+    const char *encoding = 0;
+    const char *errors = 0;
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sOccci:from_iter", keywords,
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sOccciss:from_iter",
+            keywords,
             &iterable, &yields, &header, &delimiter, &quotechar, &escapechar,
-            &yield_incomplete_row)) {
+            &yield_incomplete_row, &encoding, &errors)) {
         return NULL;
     }
 
@@ -601,7 +693,7 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
     self->cursor = new IteratorStreamCursor(iter);
     self->cursor_type = CURSOR_ITERATOR;
     return finish_init(self, yields, header, delimiter, quotechar, escapechar,
-                       yield_incomplete_row);
+                       yield_incomplete_row, encoding, errors);
 }
 
 
@@ -609,7 +701,8 @@ static PyObject *
 reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
 {
     static char *keywords[] = {"fp", "yields", "header",
-        "delimiter", "quotechar", "escapechar", "yield_incomplete_row"};
+        "delimiter", "quotechar", "escapechar", "yield_incomplete_row",
+        "encoding", "errors"};
     PyObject *fp;
     const char *yields = "row";
     PyObject *header = NULL;
@@ -617,10 +710,12 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
     char quotechar = '"';
     char escapechar = 0;
     int yield_incomplete_row = 0;
+    const char *encoding = 0;
+    const char *errors = 0;
 
-    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sOccci:from_file", keywords,
+    if(! PyArg_ParseTupleAndKeywords(args, kw, "O|sOccciss:from_file", keywords,
             &fp, &yields, &header, &delimiter, &quotechar, &escapechar,
-            &yield_incomplete_row)) {
+            &yield_incomplete_row, &encoding, &errors)) {
         return NULL;
     }
 
@@ -639,7 +734,7 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
     self->cursor = new FileStreamCursor(py_read);
     self->cursor_type = CURSOR_PYTHON_FILE;
     return finish_init(self, yields, header, delimiter, quotechar, escapechar,
-                       yield_incomplete_row);
+                       yield_incomplete_row, encoding, errors);
 }
 
 
@@ -656,7 +751,7 @@ reader_get_header(ReaderObject *self, PyObject *args)
     PyObject *value;
 
     while(PyDict_Next(self->header_map, &ppos, &key, &value)) {
-        int i = PyInt_AS_LONG(value);
+        int i = PyLong_AsLong(value);
         PyList_SET_ITEM(lst, i, key);
         Py_INCREF(key);
     }
@@ -686,7 +781,7 @@ reader_find_cell(ReaderObject *self, PyObject *args)
 static PyObject *
 reader_repr(ReaderObject *self)
 {
-    return PyString_FromFormat(
+    return PyUnicode_FromFormat(
         "<csvmonkey._Reader positioned at %d>",
         0
     );
