@@ -463,19 +463,14 @@ row_subscript(RowObject *self, PyObject *key)
 static PyObject *
 row_iter(RowObject *self)
 {
-    return NULL; /* TODO */
-    /*
-    if(self->reader->header) {
-        return PyObject_CallMethodObjArgs(
-            self->reader->header_map,
-            "iteritems",
-            NULL
-        );
+    PyObject *tup = row_astuple(self);
+    if(! tup) {
+        return NULL;
     }
 
-    Py_INCREF(self);
-    return self;
-    */
+    PyObject *iter = PyObject_GetIter(tup);
+    Py_DECREF(tup);
+    return iter;
 }
 
 
