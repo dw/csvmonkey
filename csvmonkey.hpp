@@ -38,7 +38,7 @@ namespace csvmonkey {
 class StreamCursor;
 
 
-template<class StreamCursorType=StreamCursor>
+template<class StreamCursorType=StreamCursor, int batch = 2>
 class CsvReader;
 
 
@@ -67,8 +67,8 @@ class StreamCursor
     public:
     /**
      * Current stream position. Must guarantee access to buf()[0..size()+15],
-     * with 15 trailing NULs to allow safely running PCMPSTRI on the final data
-     * byte.
+     * with 31 trailing NULs to allow safely running PCMPSTRI on the final data
+     * byte with batch=2.
      */
     virtual const char *buf() = 0;
     virtual size_t size() = 0;
@@ -217,7 +217,7 @@ class BufferedStreamCursor
         size_t available = vec_.size() - write_pos_;
         if(available < capacity) {
             CSM_DEBUG("resizing vec_ %lu", (size_t)(vec_.size() + capacity));
-            vec_.resize(16 + (vec_.size() + capacity));
+            vec_.resize(32 + (vec_.size() + capacity));
         }
     }
 
@@ -464,7 +464,7 @@ class CsvCursor
 };
 
 
-template<class StreamCursorType>
+template<class StreamCursorType, int batch>
 class alignas(16) CsvReader
 {
     const char *endp_;
@@ -495,7 +495,7 @@ class alignas(16) CsvReader
     {
         const char *p = p_;
         const char *cell_start;
-        int rc;
+        int rc, rc2;
 
         CsvCell *cell = &row_.cells[0];
         row_.count = 0;
@@ -556,14 +556,30 @@ class alignas(16) CsvReader
     in_quoted_cell:
         PREAMBLE()
         rc = quoted_cell_spanner_(p);
-        switch(rc) {
-            case 16:
-                p += 16;
-                goto in_quoted_cell;
-            default:
+        if(batch == 1) {
+            switch(rc2) {
+                case 16:
+                    p += 16;
+                    goto in_quoted_cell;
+                default:
+                    p += rc + 1;
+                    goto in_escape_or_end_of_quoted_cell;
+            }
+        } else {
+            rc2 = quoted_cell_spanner_(p+16);
+            if(rc != 16) {
                 p += rc + 1;
                 goto in_escape_or_end_of_quoted_cell;
             }
+            switch(rc2) {
+                case 16:
+                    p += 32;
+                    goto in_quoted_cell;
+                default:
+                    p += rc + 1 + 16;
+                    goto in_escape_or_end_of_quoted_cell;
+            }
+        }
 
     in_escape_or_end_of_quoted_cell:
         PREAMBLE()
