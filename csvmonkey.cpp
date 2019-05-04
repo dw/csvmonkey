@@ -26,7 +26,9 @@ struct ReaderObject
     PyObject_HEAD
     CursorType cursor_type;
     StreamCursor *cursor;
-    CsvReader<> reader;
+    // CsvReader cannot be inline because pymalloc does not satisfy alignment
+    // requirement
+    CsvReader<> *reader;
     PyObject *(*to_string)(struct ReaderObject *, CsvCell *);
     PyObject *(*yields)(RowObject *);
     int header;
@@ -463,7 +465,7 @@ static void
 reader_dealloc(ReaderObject *self)
 {
     reader_clear(self);
-    self->reader.~CsvReader();
+    delete self->reader;
     switch(self->cursor_type) {
     case CURSOR_MAPPED_FILE:
         delete (MappedFileCursor *)self->cursor;
@@ -492,7 +494,7 @@ reader_traverse(ReaderObject *self, visitproc visit, void *arg)
 static int
 header_from_first_row(ReaderObject *self)
 {
-    if(! self->reader.read_row()) {
+    if(! self->reader->read_row()) {
         if(! PyErr_Occurred()) {
             PyErr_Format(PyExc_IOError, "Could not read header row");
         }
@@ -563,9 +565,14 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
     }
 
     self->header = header && PyObject_IsTrue(header);
-    new (&(self->reader)) CsvReader<>(*self->cursor, delimiter, quotechar, escapechar,
-                                      yield_incomplete_row);
-    self->row = &self->reader.row();
+    self->reader = new CsvReader<>(
+        *self->cursor,
+        delimiter,
+        quotechar,
+        escapechar,
+        yield_incomplete_row
+    );
+    self->row = &self->reader->row();
     self->py_row = row_new(self);
 
     if(self->header) {
@@ -584,6 +591,13 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
         self->header_map = NULL;
     }
 
+    // Default to UTF-8 encoding on Python 3.
+#if PY_MAJOR_VERSION >= 3
+    if(! encoding) {
+        encoding = "utf-8";
+    }
+#endif
+
     self->encoding = NULL;
     self->errors = errors;
     if((! encoding) || (! strcmp(encoding, "bytes"))) {
@@ -591,8 +605,6 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
     } else if(! strcmp(encoding, "utf-8")) {
         self->to_string = cell_to_utf8;
     } else if(! strcmp(encoding, "ascii")) {
-        self->to_string = cell_to_ascii;
-    } else if(! strcmp(encoding, "utf-8")) {
         self->to_string = cell_to_ascii;
     } else if(! strcmp(encoding, "latin1")) {
         self->to_string = cell_to_latin1;
@@ -802,11 +814,11 @@ reader_iter(PyObject *self)
 static PyObject *
 reader_iternext(ReaderObject *self)
 {
-    if(self->reader.read_row()) {
+    if(self->reader->read_row()) {
         return self->yields((RowObject *) self->py_row);
     }
 
-    if(self->cursor->size() && !self->reader.in_newline_skip) {
+    if(self->cursor->size() && !self->reader->in_newline_skip) {
         PyErr_Format(PyExc_IOError,
             "%lu unparsed bytes at end of input. The input may be missing a "
             "final newline, or unbalanced quotes are present.",

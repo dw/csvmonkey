@@ -18,6 +18,11 @@ extra_compile_args = []
 extra_compile_args += ['-std=c++11']
 extra_compile_args += ['-O3']
 extra_compile_args += ['-w']
+
+# cc1plus: warning: command line option '-Wstrict-prototypes' is valid for
+# C/ObjC but not for C++
+extra_compile_args += ['-Wno-strict-prototypes']
+
 #extra_compile_args += ['-DUSE_SPIRIT']
 #extra_compile_args += ['-I/home/dmw/src/boost_1_64_0']
 #extra_compile_args += ['-fprofile-generate', '-lgcov']
@@ -40,6 +45,7 @@ setup(
         Extension(
             name='csvmonkey',
             sources=['csvmonkey.cpp'],
+            undef_macros=['NDEBUG'],
             extra_compile_args=extra_compile_args,
         )
     ],

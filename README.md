@@ -78,8 +78,8 @@ represented by one byte. Columns default to being returned as ``bytes``. To
 enable Unicode support, pass an ``encoding`` parameter, and optionally an
 ``errors`` parameter.
 
-* ``None``, "bytes": Return bytes (default)
-* "utf-8": Decode as UTF-8
+* ``None``, "bytes": Return bytes (default on Python 2)
+* "utf-8": Decode as UTF-8 (default on Python 3)
 * "ascii": Decode as ASCII
 * "latin1": Decode as LATIN1
 * "locale": Decode according to the active C locale
