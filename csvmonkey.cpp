@@ -21,6 +21,8 @@ enum CursorType
 };
 
 
+typedef PyObject *(*to_string_fn)(struct ReaderObject *, CsvCell *);
+
 struct ReaderObject
 {
     PyObject_HEAD
@@ -29,7 +31,7 @@ struct ReaderObject
     // CsvReader cannot be inline because pymalloc does not satisfy alignment
     // requirement
     CsvReader<> *reader;
-    PyObject *(*to_string)(struct ReaderObject *, CsvCell *);
+    to_string_fn to_string;
     PyObject *(*yields)(RowObject *);
     int header;
     size_t record; // Current record number
@@ -266,9 +268,11 @@ row_aslist(RowObject *self)
     if(lst) {
         int count = self->row->count;
         CsvCell *cell = &self->row->cells[0];
+        ReaderObject *r = self->reader;
+        to_string_fn to_string = r->to_string;
 
         for(int i = 0; i < count; i++, cell++) {
-            PyObject *s = PyBytes_FromStringAndSize(cell->ptr, cell->size);
+            PyObject *s = to_string(r, cell);
             if(! s) {
                 Py_CLEAR(lst);
                 break;
@@ -288,9 +292,11 @@ row_astuple(RowObject *self)
     if(tup) {
         int count = self->row->count;
         CsvCell *cell = &self->row->cells[0];
+        ReaderObject *r = self->reader;
+        to_string_fn to_string = r->to_string;
 
         for(int i = 0; i < count; i++, cell++) {
-            PyObject *s = PyBytes_FromStringAndSize(cell->ptr, cell->size);
+            PyObject *s = to_string(r, cell);
             if(! s) {
                 Py_CLEAR(tup);
                 break;
@@ -313,11 +319,13 @@ row_asdict(RowObject *self)
         PyObject *value;
 
         CsvCell *cells = &self->row->cells[0];
+        ReaderObject *r = self->reader;
+        to_string_fn to_string = r->to_string;
+
         while(PyDict_Next(self->reader->header_map, &ppos, &key, &value)) {
             int i = PyLong_AsLong(value);
             if(i < self->row->count) {
-                PyObject *s = PyBytes_FromStringAndSize(
-                    cells[i].ptr, cells[i].size);
+                PyObject *s = to_string(r, &cells[i]);
                 if(! s) {
                     Py_CLEAR(out);
                     break;
@@ -531,7 +539,7 @@ header_from_first_row(ReaderObject *self)
 
     CsvCell *cell = &self->row->cells[0];
     for(int i = 0; i < self->row->count; i++) {
-        PyObject *key = PyBytes_FromStringAndSize(cell->ptr, cell->size);
+        PyObject *key = self->to_string(self, cell);
         PyObject *value = PyLong_FromLong(i);
         assert(key && value);
         PyDict_SetItem(self->header_map, key, value);
@@ -600,22 +608,6 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
     self->row = &self->reader->row();
     self->py_row = row_new(self);
 
-    if(self->header) {
-        int rc;
-        if(PySequence_Check(header)) {
-            rc = header_from_sequence(self, header);
-        } else {
-            rc = header_from_first_row(self);
-        }
-
-        if(rc) {
-            Py_DECREF((PyObject *) self);
-            return NULL;
-        }
-    } else {
-        self->header_map = NULL;
-    }
-
     // Default to UTF-8 encoding on Python 3.
 #if PY_MAJOR_VERSION >= 3
     if(! encoding) {
@@ -623,9 +615,6 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
     }
 #endif
 
-    self->record = 0;
-    self->encoding = NULL;
-    self->errors = errors;
     if((! encoding) || (! strcmp(encoding, "bytes"))) {
         self->to_string = cell_to_bytes;
     } else if(! strcmp(encoding, "utf-8")) {
@@ -641,6 +630,22 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
     } else {
         self->encoding = encoding;
         self->to_string = cell_to_unicode;
+    }
+
+    if(self->header) {
+        int rc;
+        if(PySequence_Check(header)) {
+            rc = header_from_sequence(self, header);
+        } else {
+            rc = header_from_first_row(self);
+        }
+
+        if(rc) {
+            Py_DECREF((PyObject *) self);
+            return NULL;
+        }
+    } else {
+        self->header_map = NULL;
     }
 
     PyObject_GC_Track((PyObject *) self);
