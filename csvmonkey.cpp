@@ -32,6 +32,7 @@ struct ReaderObject
     PyObject *(*to_string)(struct ReaderObject *, CsvCell *);
     PyObject *(*yields)(RowObject *);
     int header;
+    size_t record; // Current record number
 
     CsvCursor *row;
     PyObject *py_row;
@@ -598,6 +599,7 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
     }
 #endif
 
+    self->record = 0;
     self->encoding = NULL;
     self->errors = errors;
     if((! encoding) || (! strcmp(encoding, "bytes"))) {
@@ -797,8 +799,8 @@ static PyObject *
 reader_repr(ReaderObject *self)
 {
     return PyUnicode_FromFormat(
-        "<csvmonkey._Reader positioned at %d>",
-        0
+        "<csvmonkey._Reader positioned at record %d>",
+        self->record
     );
 }
 
@@ -815,6 +817,7 @@ static PyObject *
 reader_iternext(ReaderObject *self)
 {
     if(self->reader->read_row()) {
+        self->record++;
         return self->yields((RowObject *) self->py_row);
     }
 
