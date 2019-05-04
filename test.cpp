@@ -1,17 +1,83 @@
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-
 #include <chrono>
 
 #include "csvmonkey.hpp"
 
-using namespace csvmonkey;
+using csvmonkey::CsvCell;
+using csvmonkey::CsvCursor;
+using csvmonkey::CsvReader;
+using csvmonkey::MappedFileCursor;
+using std::chrono::duration_cast;
+using std::chrono::high_resolution_clock;
+using std::chrono::microseconds;
 
 
-int go(const char *path);
+static void
+die(const char *msg)
+{
+    fprintf(stderr, "%s\n", msg);
+    exit(1);
+}
+
+
+static int
+go(const char *path)
+{
+    MappedFileCursor stream;
+    CsvReader<MappedFileCursor> reader(stream);
+
+    stream.open(path);
+    CsvCursor &row = reader.row();
+    if(! reader.read_row()) {
+        die("Cannot read header row");
+    }
+
+    CsvCell *cost_cell;
+    if((! row.by_value("Cost", cost_cell)) &&
+       (! row.by_value("UnBlendedCost", cost_cell))) {
+        die("Cannot find Cost column");
+    }
+
+    CsvCell *resource_id_cell;
+    if(! row.by_value("ResourceId", resource_id_cell)) {
+        die("Cannot find ResourceId column");
+    }
+
+    CsvCell *record_type_cell;
+    if(! row.by_value("RecordType", record_type_cell)) {
+        die("Cannot find RecordType column");
+    }
+
+    auto now = [&] { return high_resolution_clock::now(); };
+    double total = 0.0;
+    auto start = now();
+
+    while(reader.read_row()) {
+        if(1) {
+            if(record_type_cell->equals("LineItem")) {
+                total += cost_cell->as_double();
+            } else if(record_type_cell->equals("Rounding")) {
+                total += cost_cell->as_double();
+            }
+        }
+    }
+    auto finish = now();
+
+    printf("Total cost: %lf\n", total);
+    auto usec = duration_cast<microseconds>(finish - start).count();
+
+    struct stat st;
+    stat(path, &st);
+
+    std::cout << usec << " us\n";
+    std::cout << (st.st_size / usec) << " bytes/us\n";
+    std::cout << (
+        (1e6 / (1024.0 * 1048576.0)) * (double) (st.st_size / usec) 
+    ) << " GiB/s\n";
+    return 0;
+}
 
 
 int main(int argc, char **argv)
@@ -20,91 +86,7 @@ int main(int argc, char **argv)
     if(argc > 1) {
         path = argv[1];
     }
-    for(int i = 0 ; i < 10; i++) {
+    for(int i = 0 ; i < 5; i++) {
         go(path);
     }
-}
-
-
-int go(const char *filename)
-{
-#if 0
-    int fd = open(filename, O_RDONLY);
-    assert(fd != -1);
-
-    FdStreamCursor stream(fd);
-    //CsvReader reader(stream);
-#else
-    MappedFileCursor stream;
-
-    try {
-        stream.open(filename);
-    } catch(csvmonkey::Error &e) {
-        printf("%s\n", e.what());
-        return 1;
-    }
-#endif
-
-    CsvReader<decltype(stream)> reader(stream);
-
-    size_t rows = 0;
-    CsvCursor &row = reader.row();
-    assert(reader.read_row());
-
-    CsvCell *cost_cell;
-    CsvCell *resource_id_cell;
-    CsvCell *record_type_cell;
-
-    if(! row.by_value("Cost", cost_cell)) {
-        assert(row.by_value("UnBlendedCost", cost_cell));
-    }
-    assert(row.by_value("ResourceId", resource_id_cell));
-    assert(row.by_value("RecordType", record_type_cell));
-
-    double total_cost = 0;
-    auto start = std::chrono::high_resolution_clock::now();
-    size_t i = 0;
-
-    while(reader.read_row()) {
-        //printf("%d\n", i++);
-        if(0 && rows++ >= 160075) {
-            for(size_t i = 0; i < row.count; i++) {
-                CsvCell &cell = row.cells[i];
-                printf("%zu: %zu: %.*s\n",
-                       rows,
-                       i,
-                       (int) cell.size,
-                       cell.ptr);
-            }
-        }
-        if(0 && (++i == 4)) {
-            break;
-        }
-
-        if(0) {
-            if(record_type_cell->equals("LineItem")) {
-                total_cost += cost_cell->as_double();
-            } else if(record_type_cell->equals("Rounding")) {
-                total_cost += cost_cell->as_double();
-            }
-        } else {
-            total_cost += 0.0;
-        }
-    }
-    auto finish = std::chrono::high_resolution_clock::now();
-
-    printf("%lf\n", total_cost);
-    auto usec = std::chrono::duration_cast<std::chrono::microseconds>(
-        finish - start
-    ).count();
-
-    struct stat st;
-    stat(filename, &st);
-
-    std::cout << usec << " us\n";
-    std::cout << (st.st_size / usec) << " bytes/us\n";
-    std::cout << (
-        (1e6 / (1024.0 * 1048576.0)) * (double) (st.st_size / usec) 
-    ) << " GiB/s\n";
-    return 0;
 }
