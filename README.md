@@ -78,9 +78,10 @@ pass a header field explicitly as `header=("a", "b", "c", "d")`.
 Element access causes the relevant chunk of the row to be copied to the heap
 and returned as a Python string.
 
-Rows may be converted to dicts via `row.asdict()` or tuples using
-`row.astuple()`. If you want rows to be produced directly as dict or tuple,
-pass `yields="tuple"` or `yields="dict"` keyword arguments.
+Rows may be converted to dicts via `row.asdict()`, tuples via
+`row.astuple()` or lists via `row.aslist()`. If you want rows to be produced
+directly in concrete form, pass `yields="list"`, `yields="tuple"`,
+`yields="dict"` keyword arguments.
 
 
 ### Unicode Support

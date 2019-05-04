@@ -260,6 +260,28 @@ row_new(ReaderObject *reader)
 
 
 static PyObject *
+row_aslist(RowObject *self)
+{
+    PyObject *lst = PyList_New(self->row->count);
+    if(lst) {
+        int count = self->row->count;
+        CsvCell *cell = &self->row->cells[0];
+
+        for(int i = 0; i < count; i++, cell++) {
+            PyObject *s = PyBytes_FromStringAndSize(cell->ptr, cell->size);
+            if(! s) {
+                Py_CLEAR(lst);
+                break;
+            }
+            PyList_SET_ITEM(lst, i, s);
+        }
+    }
+
+    return lst;
+}
+
+
+static PyObject *
 row_astuple(RowObject *self)
 {
     PyObject *tup = PyTuple_New(self->row->count);
@@ -559,6 +581,8 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
 {
     if(! strcmp(yields, "dict")) {
         self->yields = row_asdict;
+    } else if(! strcmp(yields, "list")) {
+        self->yields = row_aslist;
     } else if(! strcmp(yields, "tuple")) {
         self->yields = row_astuple;
     } else {
@@ -880,7 +904,8 @@ static PyMappingMethods row_mapping_methods = {
 };
 
 static PyMethodDef row_methods[] = {
-    {"astuple",     (PyCFunction)row_astuple, METH_NOARGS, ""},
+    {"aslist",     (PyCFunction)row_aslist, METH_NOARGS, ""},
+    {"astuple",    (PyCFunction)row_astuple, METH_NOARGS, ""},
     {"asdict",     (PyCFunction)row_asdict, METH_NOARGS, ""},
     {0, 0, 0, 0}
 };
