@@ -152,6 +152,8 @@ $ python -m timeit -n 1 -r 1 -s 'import csvmonkey' 'all(csvmonkey.from_path("ram
 
 # TODO
 
+* Finish Python 3 support
+* Ensure Python ReaderObject is always 16-byte aligned
 * Fix handling of last row when it:
     * lacks newline, or
     * is truncated after final quote, or
