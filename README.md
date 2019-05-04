@@ -60,9 +60,6 @@ via the `batch=1` or `batch=2` template parameter:
    for any iterable object that yields lines or file chunks, e.g.
    `from_iter(file("ram.csv"))`.
 
-By default a file header is expected and read away during construction. If your
-CSV lacks a header, specify `header=False`.
-
 By default a magical `Row` object is yielded during iteration. This object is
 only a window into the currently parsed data, and will become invalid upon the
 next iteration. Row data can be accessed either by index or by key (if
@@ -74,11 +71,12 @@ for row in reader:
     row["UnBlendedCost"]  # by header value
 ```
 
+If your CSV contains a header, specify `header=True` in order to read it during
+construction. If the CSV lacks a header, but dict-like behaviour is desired,
+pass a header field explicitly as `header=("a", "b", "c", "d")`.
+
 Element access causes the relevant chunk of the row to be copied to the heap
 and returned as a Python string.
-
-If the CSV lacks a header, but dict-like behaviour is desired, pass a header
-field explicitly as `header=("a", "b", "c", "d")`.
 
 Rows may be converted to dicts via `row.asdict()` or tuples using
 `row.astuple()`. If you want rows to be produced directly as dict or tuple,
