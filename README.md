@@ -2,7 +2,7 @@
 
 This is a header-only vectorized, lazy-decoding, zero-copy CSV file parser.
 Given the appropriate input data and hardware, the C++ version can tokenize
-~2.4 GiB/sec of raw input in a single thread. For a basic summing task, the
+~1.9 GiB/sec of raw input in a single thread. For a basic summing task, the
 Python version is ~7x faster than `csv.reader` and ~18x faster than
 `csv.DictReader`, while maintaining a similarly usable interface.
 
@@ -13,20 +13,6 @@ also provided. It still requires a ton of work. For now it's mostly toy code.
 As of writing, csvmonkey comfortably leads <a
 href="https://bitbucket.org/ewanhiggs/csv-game">Ewan Higg's csv-game</a>
 microbenchmark of 24 CSV parsers with a 30% margin.
-
-
-## Hardware Notes
-
-The parser works best with recent generation Intel chips. It seems sometime
-between 2011 and 2018, Intel CPUs gained an extra port for vector
-string instructions, allowing up to two to run in parallel. The optimal
-implementation depending on the generation of chip and input data is exposed
-via the `batch=1` or `batch=2` template parameter:
-
-* Choose `batch=2` for recent hardware (e.g. Skylake)
-
-* Choose `batch=1` for older hardware (e.g. 2011 Macbook), or if the input data
-  is expected to have columns averaging 16 bytes or less.
 
 
 ## How It Works

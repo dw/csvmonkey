@@ -38,7 +38,7 @@ namespace csvmonkey {
 class StreamCursor;
 
 
-template<class StreamCursorType=StreamCursor, int batch = 2>
+template<class StreamCursorType=StreamCursor>
 class CsvReader;
 
 
@@ -68,7 +68,7 @@ class StreamCursor
     /**
      * Current stream position. Must guarantee access to buf()[0..size()+15],
      * with 31 trailing NULs to allow safely running PCMPSTRI on the final data
-     * byte with batch=2.
+     * byte.
      */
     virtual const char *buf() = 0;
     virtual size_t size() = 0;
@@ -464,7 +464,7 @@ class CsvCursor
 };
 
 
-template<class StreamCursorType, int batch>
+template<class StreamCursorType>
 class alignas(16) CsvReader
 {
     const char *endp_;
@@ -556,29 +556,19 @@ class alignas(16) CsvReader
     in_quoted_cell:
         PREAMBLE()
         rc = quoted_cell_spanner_(p);
-        if(batch == 1) {
-            switch(rc2) {
-                case 16:
-                    p += 16;
-                    goto in_quoted_cell;
-                default:
-                    p += rc + 1;
-                    goto in_escape_or_end_of_quoted_cell;
-            }
-        } else {
-            rc2 = quoted_cell_spanner_(p+16);
-            if(rc != 16) {
-                p += rc + 1;
+        rc2 = quoted_cell_spanner_(p+16);
+        if(rc != 16) {
+            p += rc + 1;
+            goto in_escape_or_end_of_quoted_cell;
+        }
+
+        switch(rc2) {
+            case 16:
+                p += 32;
+                goto in_quoted_cell;
+            default:
+                p += rc2 + 1 + 16;
                 goto in_escape_or_end_of_quoted_cell;
-            }
-            switch(rc2) {
-                case 16:
-                    p += 32;
-                    goto in_quoted_cell;
-                default:
-                    p += rc + 1 + 16;
-                    goto in_escape_or_end_of_quoted_cell;
-            }
         }
 
     in_escape_or_end_of_quoted_cell:
@@ -607,12 +597,18 @@ class alignas(16) CsvReader
         PREAMBLE()
         rc = unquoted_cell_spanner_(p);
         CSM_DEBUG("unquoted span: %d; p[3]=%d p[..17]='%.17s'", rc, p[3], p);
-        switch(rc) {
+        rc2 = quoted_cell_spanner_(p+16);
+        if(rc != 16) {
+            p += rc;
+            goto in_escape_or_end_of_unquoted_cell;
+        }
+
+        switch(rc2) {
         case 16:
-            p += 16;
+            p += 32;
             goto in_unquoted_cell;
         default:
-            p += rc;
+            p += rc2 + 16;
             goto in_escape_or_end_of_unquoted_cell;
         }
 
