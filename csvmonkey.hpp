@@ -35,6 +35,10 @@
 namespace csvmonkey {
 
 
+class StreamCursor;
+
+
+template<class StreamCursorType=StreamCursor>
 class CsvReader;
 
 
@@ -81,6 +85,11 @@ class MappedFileCursor
     char *p_;
     char *guardp_;
 
+    size_t get_page_size()
+    {
+        return (size_t) sysconf(_SC_PAGESIZE);
+    }
+
     public:
     MappedFileCursor()
         : startp_(0)
@@ -95,29 +104,28 @@ class MappedFileCursor
         if(startp_) {
             ::munmap(startp_, endp_ - startp_);
         }
-        unsigned long page_size = sysconf(_SC_PAGESIZE);
         if(guardp_) {
-            ::munmap(guardp_, page_size);
+            ::munmap(guardp_, get_page_size());
         }
     }
 
-    virtual const char *buf()
+    const char *buf()
     {
         return p_;
     }
 
-    virtual size_t size()
+    size_t size()
     {
         return endp_ - p_;
     }
 
-    virtual void consume(size_t n)
+    void consume(size_t n)
     {
         p_ += std::min(n, (size_t) (endp_ - p_));
         CSM_DEBUG("consume(%lu); new size: %lu", n, size())
     }
 
-    virtual bool fill()
+    bool fill()
     {
         return false;
     }
@@ -154,7 +162,7 @@ class MappedFileCursor
         // performing the same operation. So here we exploit crap UNIX
         // semantics to avoid a race.
 
-        unsigned long page_size = sysconf(_SC_PAGESIZE);
+        unsigned long page_size = get_page_size();
         unsigned long page_mask = page_size - 1;
         size_t rounded = (st.st_size & page_mask)
             ? ((st.st_size & ~page_mask) + page_size)
@@ -179,6 +187,7 @@ class MappedFileCursor
         }
 
         ::madvise(startp_, st.st_size, MADV_SEQUENTIAL);
+        ::madvise(startp_, st.st_size, MADV_WILLNEED);
         endp_ = startp_ + st.st_size;
         p_ = startp_;
     }
@@ -291,7 +300,7 @@ struct CsvCell
         auto s = std::string(ptr, size);
         if(escaped) {
             int o = 0;
-            for(int i = 0; i < s.size();) {
+            for(size_t i = 0; i < s.size();) {
                 char c = s[i];
                 if((escapechar && c == escapechar) || (c == quotechar)) {
                     i++;
@@ -432,7 +441,7 @@ class CsvCursor
 {
     public:
     std::vector<CsvCell> cells;
-    int count;
+    size_t count;
 
     CsvCursor()
         : cells(32)
@@ -443,7 +452,7 @@ class CsvCursor
     bool
     by_value(const std::string &value, CsvCell *&cell)
     {
-        for(int i = 0; i < count; i++) {
+        for(size_t i = 0; i < count; i++) {
             if(value == cells[i].as_str(0, 0)) {
                 cell = &cells[i];
                 return true;
@@ -454,6 +463,7 @@ class CsvCursor
 };
 
 
+template<class StreamCursorType>
 class CsvReader
 {
     const char *endp_;
@@ -467,7 +477,7 @@ class CsvReader
     bool in_newline_skip;
 
     private:
-    StreamCursor &stream_;
+    StreamCursorType &stream_;
     StringSpanner quoted_cell_spanner_;
     StringSpanner unquoted_cell_spanner_;
     CsvCursor row_;
@@ -614,7 +624,6 @@ class CsvReader
             goto in_unquoted_cell;
         }
 
-    end_of_buf:
         CSM_DEBUG("error out");
         return kCsmTryParseUnderrun;
     }
@@ -693,7 +702,7 @@ class CsvReader
         return row_;
     }
 
-    CsvReader(StreamCursor &stream,
+    CsvReader(StreamCursorType &stream,
             char delimiter=',',
             char quotechar='"',
             char escapechar=0,
@@ -703,10 +712,10 @@ class CsvReader
         , delimiter_(delimiter)
         , quotechar_(quotechar)
         , escapechar_(escapechar)
+        , yield_incomplete_row_(yield_incomplete_row)
         , stream_(stream)
         , quoted_cell_spanner_(quotechar, escapechar)
         , unquoted_cell_spanner_(delimiter, '\r', '\n', escapechar)
-        , yield_incomplete_row_(yield_incomplete_row)
     {
     }
 };

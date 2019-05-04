@@ -1,4 +1,9 @@
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+
 #include <chrono>
 
 #include "csvmonkey.hpp"
@@ -6,21 +11,29 @@
 using namespace csvmonkey;
 
 
+int go(const char *path);
+
+
 int main(int argc, char **argv)
 {
-    chdir("/Users/dmw/py-csvmonkey");
-
-    const char *filename = "ram.csv";
+    const char *path = "ram.csv";
     if(argc > 1) {
-        filename = argv[1];
+        path = argv[1];
     }
+    for(int i = 0 ; i < 10; i++) {
+        go(path);
+    }
+}
 
+
+int go(const char *filename)
+{
 #if 0
     int fd = open(filename, O_RDONLY);
     assert(fd != -1);
 
     FdStreamCursor stream(fd);
-    CsvReader reader(stream);
+    //CsvReader reader(stream);
 #else
     MappedFileCursor stream;
 
@@ -30,10 +43,11 @@ int main(int argc, char **argv)
         printf("%s\n", e.what());
         return 1;
     }
-    CsvReader reader(stream);
 #endif
 
-    int rows = 0;
+    CsvReader<decltype(stream)> reader(stream);
+
+    size_t rows = 0;
     CsvCursor &row = reader.row();
     assert(reader.read_row());
 
@@ -49,14 +63,18 @@ int main(int argc, char **argv)
 
     double total_cost = 0;
     auto start = std::chrono::high_resolution_clock::now();
-    int i = 0;
+    size_t i = 0;
 
     while(reader.read_row()) {
         //printf("%d\n", i++);
         if(0 && rows++ >= 160075) {
-            for(int i = 0; i < row.count; i++) {
+            for(size_t i = 0; i < row.count; i++) {
                 CsvCell &cell = row.cells[i];
-                printf("%d: %i: %.*s\n", rows, i, (int)cell.size, cell.ptr);
+                printf("%zu: %zu: %.*s\n",
+                       rows,
+                       i,
+                       (int) cell.size,
+                       cell.ptr);
             }
         }
         if(0 && (++i == 4)) {
@@ -76,6 +94,17 @@ int main(int argc, char **argv)
     auto finish = std::chrono::high_resolution_clock::now();
 
     printf("%lf\n", total_cost);
-    std::cout << (std::chrono::duration_cast<std::chrono::microseconds>(finish-start).count()) << " us\n";
+    auto usec = std::chrono::duration_cast<std::chrono::microseconds>(
+        finish - start
+    ).count();
+
+    struct stat st;
+    stat(filename, &st);
+
+    std::cout << usec << " us\n";
+    std::cout << (st.st_size / usec) << " bytes/us\n";
+    std::cout << (
+        (1e6 / (1024.0 * 1048576.0)) * (double) (st.st_size / usec) 
+    ) << " GiB/s\n";
     return 0;
 }

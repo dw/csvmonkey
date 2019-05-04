@@ -26,7 +26,7 @@ struct ReaderObject
     PyObject_HEAD
     CursorType cursor_type;
     StreamCursor *cursor;
-    CsvReader reader;
+    CsvReader<> reader;
     PyObject *(*yields)(RowObject *);
     int header;
 
@@ -496,8 +496,8 @@ finish_init(ReaderObject *self, const char *yields, PyObject *header,
     }
 
     self->header = header && PyObject_IsTrue(header);
-    new (&(self->reader)) CsvReader(*self->cursor, delimiter, quotechar, escapechar,
-                                    yield_incomplete_row);
+    new (&(self->reader)) CsvReader<>(*self->cursor, delimiter, quotechar, escapechar,
+                                      yield_incomplete_row);
     self->row = &self->reader.row();
     self->py_row = row_new(self);
 
