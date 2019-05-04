@@ -337,6 +337,11 @@ struct FieldPair
 
 #ifndef CSM_USE_SSE42
 #warning Using non-SSE4.2 fallback implementation.
+/**
+ * Callable that matches a set of up to 5 bytes (including NUL) in a 16 byte
+ * string. The index 0..15 of the first occurrence is returned, otherwise 16 is
+ * returned if no match is found or NUL is encountered.
+ */
 struct StringSpannerFallback
 {
     uint8_t charset_[256];
