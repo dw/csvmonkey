@@ -163,6 +163,7 @@ python -mtimeit -n1 -r3 -s 'import csv' 'all(csv.DictReader(open("ram.csv")))'
 
 # TODO
 
+* COW pointer interface to `as_str()`.
 * ~~Finish Python 3 support~~
 * ~~Ensure Python ReaderObject is always 16-byte aligned~~
 * Fix handling of last row when it:
