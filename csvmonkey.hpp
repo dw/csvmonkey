@@ -312,14 +312,20 @@ struct CsvCell
         return s;
     }
 
-    bool startswith(const char *str)
+    bool startswith(const char *str) const
     {
         return std::string(ptr, std::min(size, strlen(str))) == str;
     }
 
-    bool equals(const char *str)
+    bool equals(const char *str) const
     {
-        return strlen(str) == size && startswith(str);
+        auto p = ptr;
+        for(auto len = size; len--;) {
+            if((! *p) || *str++ != *p++) {
+                return false;
+            }
+        }
+        return true;
     }
 
     double as_double()
