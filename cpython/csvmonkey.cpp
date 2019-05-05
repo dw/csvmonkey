@@ -334,6 +334,12 @@ row_astuple(RowObject *self)
 static PyObject *
 row_asdict(RowObject *self)
 {
+    if(! self->reader->header_map) {
+        PyErr_Format(PyExc_TypeError,
+                     "Cannot convert to dict; no header is present");
+        return NULL;
+    }
+
     PyObject *out = PyDict_New();
     if(out) {
         Py_ssize_t ppos = 0;
@@ -510,23 +516,30 @@ reader_clear(ReaderObject *self)
 
 
 static void
-reader_dealloc(ReaderObject *self)
+delete_cursor(CursorType type, StreamCursor *cursor)
 {
-    reader_clear(self);
-    delete self->reader;
-    switch(self->cursor_type) {
+    switch(type) {
     case CURSOR_MAPPED_FILE:
-        delete (MappedFileCursor *)self->cursor;
+        delete (MappedFileCursor *)cursor;
         break;
     case CURSOR_ITERATOR:
-        delete (IteratorStreamCursor *)self->cursor;
+        delete (IteratorStreamCursor *)cursor;
         break;
     case CURSOR_PYTHON_FILE:
-        delete (FileStreamCursor *)self->cursor;
+        delete (FileStreamCursor *)cursor;
         break;
     default:
         assert(0);
     }
+}
+
+
+static void
+reader_dealloc(ReaderObject *self)
+{
+    reader_clear(self);
+    delete self->reader;
+    delete_cursor(self->cursor_type, self->cursor);
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -599,11 +612,29 @@ header_from_sequence(ReaderObject *self, PyObject *header)
 
 
 static PyObject *
-finish_init(ReaderObject *self, const char *yields, PyObject *header,
-            char delimiter, char quotechar, char escapechar,
-            bool yield_incomplete_row,
-            const char *encoding, const char *errors)
+reader_from_cursor(CursorType cursor_type,
+                   StreamCursor *cursor,
+                   const char *yields,
+                   PyObject *header,
+                   char delimiter,
+                   char quotechar,
+                   char escapechar,
+                   bool yield_incomplete_row,
+                   const char *encoding,
+                   const char *errors)
 {
+    ReaderObject *self = PyObject_GC_New(ReaderObject, &ReaderType);
+    if(! self) {
+        delete_cursor(cursor_type, cursor);
+        Py_DECREF(self);
+        return NULL;
+    }
+
+    self->cursor_type = cursor_type;
+    self->cursor = cursor;
+    self->record = 0;
+    self->errors = errors;
+
     if(! strcmp(yields, "dict")) {
         self->yields = row_asdict;
     } else if(! strcmp(yields, "list")) {
@@ -692,28 +723,27 @@ reader_from_path(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    ReaderObject *self = PyObject_GC_New(ReaderObject, &ReaderType);
-    if(! self) {
-        return NULL;
-    }
-
-    self->py_row = NULL;
-    self->header_map = NULL;
-
     MappedFileCursor *cursor = new MappedFileCursor();
     try {
         cursor->open(path);
     } catch(csvmonkey::Error &e) {
         delete cursor;
         PyErr_Format(PyExc_IOError, "%s: %s", path, e.what());
-        Py_DECREF(self);
         return NULL;
     }
 
-    self->cursor = cursor;
-    self->cursor_type = CURSOR_MAPPED_FILE;
-    return finish_init(self, yields, header, delimiter, quotechar, escapechar,
-                       yield_incomplete_row, encoding, errors);
+    return reader_from_cursor(
+        CURSOR_MAPPED_FILE,
+        cursor,
+        yields,
+        header,
+        delimiter,
+        quotechar,
+        escapechar,
+        yield_incomplete_row,
+        encoding,
+        errors
+    );
 }
 
 
@@ -745,18 +775,18 @@ reader_from_iter(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    ReaderObject *self = PyObject_GC_New(ReaderObject, &ReaderType);
-    if(! self) {
-        Py_DECREF(iter);
-        return NULL;
-    }
-
-    self->py_row = NULL;
-    self->header_map = NULL;
-    self->cursor = new IteratorStreamCursor(iter);
-    self->cursor_type = CURSOR_ITERATOR;
-    return finish_init(self, yields, header, delimiter, quotechar, escapechar,
-                       yield_incomplete_row, encoding, errors);
+    return reader_from_cursor(
+        CURSOR_ITERATOR,
+        new IteratorStreamCursor(iter),
+        yields,
+        header,
+        delimiter,
+        quotechar,
+        escapechar,
+        yield_incomplete_row,
+        encoding,
+        errors
+    );
 }
 
 
@@ -788,16 +818,18 @@ reader_from_file(PyObject *_self, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    ReaderObject *self = PyObject_GC_New(ReaderObject, &ReaderType);
-    if(! self) {
-        Py_DECREF(py_read);
-        return NULL;
-    }
-
-    self->cursor = new FileStreamCursor(py_read);
-    self->cursor_type = CURSOR_PYTHON_FILE;
-    return finish_init(self, yields, header, delimiter, quotechar, escapechar,
-                       yield_incomplete_row, encoding, errors);
+    return reader_from_cursor(
+        CURSOR_PYTHON_FILE,
+        new FileStreamCursor(py_read),
+        yields,
+        header,
+        delimiter,
+        quotechar,
+        escapechar,
+        yield_incomplete_row,
+        encoding,
+        errors
+    );
 }
 
 
