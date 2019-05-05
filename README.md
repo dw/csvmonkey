@@ -3,31 +3,32 @@
 This is a header-only vectorized, lazy-decoding, zero-copy CSV file parser.
 Given the appropriate input data and hardware, the C++ version can tokenize
 ~1.9 GiB/sec of raw input in a single thread. For a basic summing task, the
-Python version is ~7x faster than `csv.reader` and ~18x faster than
+Python version is ~5x faster than `csv.reader` and ~10x faster than
 `csv.DictReader`, while maintaining a similarly usable interface.
 
 Requires a CPU supporting Intel SSE4.2 and a C++11 compiler that bundles
 `smmintrin.h`. For non-SSE4.2 machines, a reasonable fallback implementation is
-also provided. It still requires a ton of work. For now it's mostly toy code.
+also provided.
+
+**This still requires a ton of work. For now it's mostly toy code.**
 
 As of writing, csvmonkey comfortably leads <a
 href="https://bitbucket.org/ewanhiggs/csv-game">Ewan Higg's csv-game</a>
-microbenchmark of 24 CSV parsers with a 30% margin.
+microbenchmark of 24 CSV parsers.
 
 
 ## How It Works
 
-* **Vectorized**: scanning for byte values that influence parser state is done
-  using Intel SSE 4.2 PCMPISTRI instruction. PCMPISTRI can locate the first
-  occurence of up to four distinct values within a 16 byte vector, allowing
-  searching 16 input bytes for end of line, escape, quote, or field separators
-  in one instruction.
+* **Vectorized**: scanning for values that change parser state is done using
+  Intel SSE 4.2 PCMPISTRI instruction. PCMPISTRI can locate the first occurence
+  of up to four values within a 16 byte vector, allowing searching 16 input
+  bytes for end of line, escape, quote, or field separators in one instruction.
 
-* **Zero Copy**: the user supplies the parser's input buffers. The output of
-  is an array of column offsets within a row, each containing a flag to
-  indicate whether an escape character was detected. The highest throughput is
-  achieved in combination with memory-mapped files, where none of the OS,
-  application or parser make any bulk copies.
+* **Zero Copy**: the user supplies the parser's input buffer. The output is an
+  array of column offsets within a row, each flagged to indicate whether an
+  escape character was detected. The highest throughput is achieved in
+  combination with memory-mapped files, where none of the OS, application or
+  parser make any bulk copies.
 
 * **Lazy Decoding**: input is not copied or unescaped until it is requested.
   Since a flag indicates the presence of escapes, a fast path is possible that
@@ -52,7 +53,7 @@ next iteration. Row data can be accessed either by index or by key (if
 `header=True`) using:
 
 ```
-for row in reader:
+for row in csvmonkey.from_path("ram.csv"):
     row[20]  # by index
     row["UnBlendedCost"]  # by header value
 ```
@@ -70,12 +71,11 @@ directly in concrete form, pass `yields="list"`, `yields="tuple"`,
 `yields="dict"` keyword arguments.
 
 
-### Unicode Support
+### Unicode
 
 Unicode is supported for character sets where delimiters and line endings are
-represented by one byte. Columns default to being returned as ``bytes``. To
-enable Unicode support, pass an ``encoding`` parameter, and optionally an
-``errors`` parameter.
+represented by one byte. To configure Unicode, pass an ``encoding`` parameter,
+and optionally an ``errors`` parameter.
 
 * "bytes": Return bytes (default on Python 2)
 * "utf-8": Decode as UTF-8 (default on Python 3)
@@ -96,35 +96,35 @@ bytes per record. An anonymized version is checked into LFS as
 
 Python 2.7 Sum: convert to float and sum single column:
 
-| Mode                     | i7-6700HQ | Xeon E5530 | Core i5-2435M |
-|--------------------------|-----------|------------|---------------|
-| csvmonkey Lazy Decode    | 0.559s    | 0.9s       | 1.29s         |
-| csvmonkey yields="tuple" | 0.956s    | 1.87s      | 2.17s         |
-| csvmonkey yields="dict"  | 2.18s     | 4.57s      | 5.04s         |
-| csv.reader               | 2.75s     | 5.88s      | 11.1s         |
-| csv.DictReader           | 7.15s     | 16.3s      | 25.0s         |
+| Mode                     | Ratio | i7-6700HQ | Xeon E5530 | Core i5-2435M |
+|--------------------------|-------|-----------|------------|---------------|
+| csvmonkey Lazy Decode    | -     | 0.559s    | 0.9s       | 1.29s         |
+| csvmonkey yields="tuple" | 1.7x  | 0.956s    | 1.87s      | 2.17s         |
+| csvmonkey yields="dict"  | 3.8x  | 2.18s     | 4.57s      | 5.04s         |
+| csv.reader               | 4.9x  | 2.75s     | 5.88s      | 11.1s         |
+| csv.DictReader           | 12.7x | 7.15s     | 16.3s      | 25.0s         |
 
 Python 2.7 No-op: Iterate complete file, no other processing:
 
-| Mode                     | i7-6700HQ | Xeon E5530 |
-|--------------------------|-----------|------------|
-| csvmonkey Lazy Decode    | 0.322s    | 0.444s     |
-| csvmonkey yields="tuple" | 0.738s    | 1.4s       |
-| csvmonkey yields="dict"  | 1.93s     | 4.26s      |
-| csv.reader               | 2.47s     | 5.31s      |
-| csv.DictReader           | 6.62s     | 15.2s      |
+| Mode                     | Ratio | i7-6700HQ | Xeon E5530 |
+|--------------------------|-------|-----------|------------|
+| csvmonkey Lazy Decode    | -     | 0.322s    | 0.444s     |
+| csvmonkey yields="tuple" | 2.3x  | 0.738s    | 1.4s       |
+| csvmonkey yields="dict"  | 6.0x  | 1.93s     | 4.26s      |
+| csv.reader               | 7.6x  | 2.47s     | 5.31s      |
+| csv.DictReader           | 20.5x | 6.62s     | 15.2s      |
 
 Python 3.6 No-op: Iterate complete file, includes charset decoding
 
-| Mode                                          | i7-6700HQ  | Xeon E5530 |
-|-----------------------------------------------|------------|------------|
-| csvmonkey Lazy Decode                         | 0.322s     | -          |
-| csvmonkey yields="tuple", encoding="bytes"    | 0.737s     | -          |
-| csvmonkey yields="tuple", encoding="latin1"   | 1.06s      | -          |
-| csvmonkey yields="tuple"                      | 1.24s      | -          |
-| csvmonkey yields="dict"                       | 2.61s      | -          |
-| csv.reader                                    | 5.07s      | -          |
-| csv.DictReader                                | 11.1s      | -          |
+| Mode                                        | Ratio      | i7-6700HQ  |
+|---------------------------------------------|------------|------------|
+| csvmonkey Lazy Decode                       | -          | 0.322s     |
+| csvmonkey yields="tuple", encoding="bytes"  | 2.3x       | 0.737s     |
+| csvmonkey yields="tuple", encoding="latin1" | 3.3x       | 1.06s      |
+| csvmonkey yields="tuple"                    | 3.8x       | 1.24s      |
+| csvmonkey yields="dict"                     | 8.1x       | 2.61s      |
+| csv.reader                                  | 15.7x      | 5.07s      |
+| csv.DictReader                              | 34.4x      | 11.1s      |
 
 
 ### Command lines
