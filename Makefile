@@ -8,6 +8,12 @@ CXXFLAGS += -Wall
 CXXFLAGS += -lc
 #CXXFLAGS += -DUSE_SPIRIT
 
+default: debug python
+
+python:
+	rm -rf build
+	python setup.py build_ext --inplace
+
 debug: CXXFLAGS+=-O0 -g
 debug: tests/bench/iteration
 
