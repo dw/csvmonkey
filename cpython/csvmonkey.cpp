@@ -397,17 +397,11 @@ row_repr(RowObject *self)
         return NULL;
     }
 
-    PyObject *obj_repr = PyObject_Repr(obj);
-    Py_DECREF(obj);
-    if(! obj_repr) {
-        return NULL;
-    }
-
     PyObject *repr = PyUnicode_FromFormat(
-        "<csvmonkey._Row positioned at %s>",
-        PyBytes_AsString(obj_repr)
+        "<csvmonkey._Row positioned at %R>",
+        obj
     );
-    Py_DECREF(obj_repr);
+    Py_DECREF(obj);
     return repr;
 }
 
