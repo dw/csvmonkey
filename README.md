@@ -92,7 +92,7 @@ encodings, to ensure an associated fast path is used.
 
 ram.csv is 614MiB with 1,540,093 records of 22 columns and approximately 418
 bytes per record. An anonymized version is checked into LFS as
-``testdata/anon-ram.csv.zstd``.
+``tests/data/anon-ram.csv.zstd``.
 
 Python 2.7 Sum: convert to float and sum single column:
 

@@ -23,7 +23,7 @@ clean:
 pgo: X+=-DNDEBUG
 pgo:
 	g++ -std=c++11 $(CXXFLAGS) -DNDEBUG -fprofile-generate -msse4.2 $(X) -g -o test test.cpp
-	./test testdata/profiledata.csv
+	./test tests/data/profiledata.csv
 	g++ -std=c++11 $(CXXFLAGS) -DNDEBUG -fprofile-use -msse4.2 $(X) -g -o test test.cpp
 
 grind:
