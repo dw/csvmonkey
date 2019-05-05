@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <chrono>
 
-#include "csvmonkey.hpp"
+#include "../csvmonkey.hpp"
 
 using csvmonkey::CsvCell;
 using csvmonkey::CsvCursor;
@@ -55,7 +55,7 @@ go(const char *path)
     auto start = now();
 
     while(reader.read_row()) {
-        if(1) {
+        if(0) {
             if(record_type_cell->equals("LineItem")) {
                 total += cost_cell->as_double();
             } else if(record_type_cell->equals("Rounding")) {
