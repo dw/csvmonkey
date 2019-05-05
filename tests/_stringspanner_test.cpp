@@ -1,5 +1,7 @@
+#include <string>
+
 #include "catch.hpp"
-#include "../csvmonkey.hpp"
+#include "csvmonkey.hpp"
 
 
 TEST_CASE(PREFIX "initialNullTerminates", "[stringspanner]")

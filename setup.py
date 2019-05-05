@@ -24,6 +24,7 @@ def has_sse42():
 
 extra_compile_args = []
 extra_compile_args += ['-std=c++11']
+extra_compile_args += ['-Iinclude']
 extra_compile_args += ['-O3']
 extra_compile_args += ['-w']
 

@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <chrono>
 
-#include "../csvmonkey.hpp"
+#include "csvmonkey.hpp"
 
 using csvmonkey::CsvCell;
 using csvmonkey::CsvCursor;

@@ -1,7 +1,7 @@
 #include <cstdio>
 
-#include "../csvmonkey.hpp"
-#include "../third_party/picosha2.h"
+#include "csvmonkey.hpp"
+#include "picosha2.h"
 
 
 using namespace csvmonkey;

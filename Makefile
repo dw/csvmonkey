@@ -1,4 +1,7 @@
 
+CXXFLAGS += -Iinclude
+CXXFLAGS += -Ithird_party
+
 CXXFLAGS += -std=c++11
 CXXFLAGS += -O3
 CXXFLAGS += -Wall
@@ -11,10 +14,10 @@ debug: tests/bench/iteration
 release: X=-DNDEBUG
 release: tests/bench/iteration tests/fullsum
 
-tests/bench/iteration: tests/bench/iteration.cpp csvmonkey.hpp Makefile
+tests/bench/iteration: tests/bench/iteration.cpp include/csvmonkey.hpp Makefile
 	g++ -std=c++11 $(CXXFLAGS) -msse4.2 $(X) -g -o tests/bench/iteration tests/bench/iteration.cpp
 
-tests/fullsum: tests/fullsum.cpp csvmonkey.hpp Makefile
+tests/fullsum: tests/fullsum.cpp include/csvmonkey.hpp Makefile
 	g++ -std=c++11 $(CXXFLAGS) -msse4.2 $(X) -g -o tests/fullsum tests/fullsum.cpp
 
 clean:
