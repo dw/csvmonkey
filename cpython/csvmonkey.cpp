@@ -1,7 +1,7 @@
 
 #include <Python.h>
 
-#include "csvmonkey.hpp"
+#include "../csvmonkey.hpp"
 #include "iterator_stream_cursor.hpp"
 #include "file_stream_cursor.hpp"
 

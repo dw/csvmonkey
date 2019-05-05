@@ -52,7 +52,7 @@ setup(
     ext_modules = [
         Extension(
             name='csvmonkey',
-            sources=['csvmonkey.cpp'],
+            sources=['cpython/csvmonkey.cpp'],
             undef_macros=['NDEBUG'],
             extra_compile_args=extra_compile_args,
         )
