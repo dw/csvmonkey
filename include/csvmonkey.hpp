@@ -1,8 +1,9 @@
 
-#include <cerrno>
 #include <algorithm>
 #include <cassert>
+#include <cerrno>
 #include <cstring>
+#include <exception>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
@@ -42,7 +43,7 @@ template<class StreamCursorType=StreamCursor>
 class CsvReader;
 
 
-class Error
+class Error : public std::exception
 {
     std::string s_;
 
