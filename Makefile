@@ -9,16 +9,16 @@ debug: CXXFLAGS+=-O0 -g
 debug: test
 
 release: X=-DNDEBUG
-release: test fullsum
+release: test tests/fullsum
 
 test: test.cpp csvmonkey.hpp Makefile
 	g++ -std=c++11 $(CXXFLAGS) -msse4.2 $(X) -g -o test test.cpp
 
-fullsum: fullsum.cpp csvmonkey.hpp Makefile
-	g++ -std=c++11 $(CXXFLAGS) -msse4.2 $(X) -g -o fullsum fullsum.cpp
+tests/fullsum: tests/fullsum.cpp csvmonkey.hpp Makefile
+	g++ -std=c++11 $(CXXFLAGS) -msse4.2 $(X) -g -o tests/fullsum tests/fullsum.cpp
 
 clean:
-	rm -f fullsum test cachegrind* perf.data* *.gcda
+	rm -f tests/fullsum test cachegrind* perf.data* *.gcda
 
 pgo: X+=-DNDEBUG
 pgo:
