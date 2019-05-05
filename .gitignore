@@ -1,7 +1,7 @@
 ram.*
 perf.data*
 **.*.sw[op]
-test
+tests/bench/iteration
 *.pyc
 build
 **.so
