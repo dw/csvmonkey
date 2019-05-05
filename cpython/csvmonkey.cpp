@@ -76,28 +76,44 @@ struct RowObject
 static PyObject *
 cell_to_bytes(ReaderObject *reader, CsvCell *cell)
 {
-    return PyBytes_FromStringAndSize(cell->ptr, cell->size);
+    if(! cell->escaped) {
+        return PyBytes_FromStringAndSize(cell->ptr, cell->size);
+    }
+    auto s = cell->as_str();
+    return PyBytes_FromStringAndSize(&s[0], s.size());
 }
 
 
 static PyObject *
 cell_to_utf8(ReaderObject *reader, CsvCell *cell)
 {
-    return PyUnicode_DecodeUTF8(cell->ptr, cell->size, reader->errors);
+    if(! cell->escaped) {
+        return PyUnicode_DecodeUTF8(cell->ptr, cell->size, reader->errors);
+    }
+    auto s = cell->as_str();
+    return PyUnicode_DecodeUTF8(&s[0], s.size(), reader->errors);
 }
 
 
 static PyObject *
 cell_to_ascii(ReaderObject *reader, CsvCell *cell)
 {
-    return PyUnicode_DecodeASCII(cell->ptr, cell->size, reader->errors);
+    if(! cell->escaped) {
+        return PyUnicode_DecodeASCII(cell->ptr, cell->size, reader->errors);
+    }
+    auto s = cell->as_str();
+    return PyUnicode_DecodeASCII(&s[0], s.size(), reader->errors);
 }
 
 
 static PyObject *
 cell_to_latin1(ReaderObject *reader, CsvCell *cell)
 {
-    return PyUnicode_DecodeLatin1(cell->ptr, cell->size, reader->errors);
+    if(! cell->escaped) {
+        return PyUnicode_DecodeLatin1(cell->ptr, cell->size, reader->errors);
+    }
+    auto s = cell->as_str();
+    return PyUnicode_DecodeLatin1(&s[0], s.size(), reader->errors);
 }
 
 
@@ -105,7 +121,11 @@ cell_to_latin1(ReaderObject *reader, CsvCell *cell)
 static PyObject *
 cell_to_locale(ReaderObject *reader, CsvCell *cell)
 {
-    return PyUnicode_DecodeLocaleAndSize(cell->ptr, cell->size, reader->errors);
+    if(! cell->escaped) {
+        return PyUnicode_DecodeLocaleAndSize(cell->ptr, cell->size, reader->errors);
+    }
+    auto s = cell->as_str();
+    return PyUnicode_DecodeLocaleAndSize(&s[0], s.size(), reader->errors);
 }
 #endif
 
@@ -113,10 +133,12 @@ cell_to_locale(ReaderObject *reader, CsvCell *cell)
 static PyObject *
 cell_to_unicode(ReaderObject *reader, CsvCell *cell)
 {
-    return PyUnicode_Decode(
-        cell->ptr, cell->size,
-        reader->encoding, reader->errors
-    );
+    if(! cell->escaped) {
+        return PyUnicode_Decode(cell->ptr, cell->size,
+            reader->encoding, reader->errors);
+    }
+    auto s = cell->as_str();
+    return PyUnicode_Decode(&s[0], s.size(), reader->encoding, reader->errors);
 }
 
 
