@@ -49,7 +49,7 @@ setup(
     name='csvmonkey',
     author='David Wilson',
     author_email='dw+csvmonkey@botanicus.net',
-    version='0.0.4',
+    version='0.0.5',
     classifiers=[],
     url='https://github.com/dw/csvmonkey/',
     ext_modules = [
