@@ -47,7 +47,9 @@ else:
 
 setup(
     name='csvmonkey',
-    version='0.0.3',
+    author='David Wilson',
+    author_email='dw+csvmonkey@botanicus.net',
+    version='0.0.4',
     classifiers=[],
     url='https://github.com/dw/csvmonkey/',
     ext_modules = [
