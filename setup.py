@@ -1,9 +1,17 @@
 
 from __future__ import print_function
+import os
 import sys
 
 from setuptools import Extension
 from setuptools import setup
+
+sys.path.insert(0,
+    os.path.join(
+        os.path.dirname(__file__),
+        'third_party',
+    )
+)
 
 import cpuid
 
