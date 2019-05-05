@@ -4,3 +4,4 @@ perf.data*
 test
 *.pyc
 build
+**.so
