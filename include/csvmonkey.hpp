@@ -233,7 +233,7 @@ class BufferedStreamCursor
         return write_pos_ - read_pos_;
     }
 
-    virtual void consume(size_t n)
+    void consume(size_t n)
     {
         read_pos_ += std::min(n, write_pos_ - read_pos_);
         CSM_DEBUG("consume(%lu); new size: %lu", n, size())
@@ -293,10 +293,12 @@ struct CsvCell
 {
     const char *ptr;
     size_t size;
+
+    char escapechar;
+    char quotechar;
     bool escaped;
 
-    public:
-    std::string as_str(char escapechar=0, char quotechar=0)
+    std::string as_str()
     {
         auto s = std::string(ptr, size);
         if(escaped) {
@@ -452,7 +454,7 @@ class CsvCursor
     size_t count;
 
     CsvCursor()
-        : cells(32)
+        : cells()
         , count(0)
     {
     }
@@ -461,7 +463,7 @@ class CsvCursor
     by_value(const std::string &value, CsvCell *&cell)
     {
         for(size_t i = 0; i < count; i++) {
-            if(value == cells[i].as_str(0, 0)) {
+            if(value == cells[i].as_str()) {
                 cell = &cells[i];
                 return true;
             }
@@ -683,6 +685,24 @@ class alignas(16) CsvReader
         }
     }
 
+    void
+    _resize()
+    {
+        auto &cells = row_.cells;
+        auto size = cells.size() * 2;
+        if(! size) {
+            size = 32;
+        }
+
+        cells.resize(size);
+        // For as_str()
+        for(size_t i = 0; i < size; i++) {
+            CsvCell &cell = cells[i];
+            cell.quotechar = quotechar_;
+            cell.escapechar = escapechar_;
+        }
+    }
+
     bool
     read_row()
     {
@@ -698,7 +718,7 @@ class alignas(16) CsvReader
                     stream_.consume(p_ - p);
                     return true;
                 case kCsmTryParseOverflow:
-                    row_.cells.resize(2 * row_.cells.size());
+                    _resize();
                     return read_row();
                 case kCsmTryParseUnderrun:
                     ;
@@ -737,6 +757,7 @@ class alignas(16) CsvReader
         , quoted_cell_spanner_(quotechar, escapechar)
         , unquoted_cell_spanner_(delimiter, '\r', '\n', escapechar)
     {
+        _resize();
     }
 };
 
