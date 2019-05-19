@@ -606,7 +606,7 @@ class alignas(16) CsvReader
         PREAMBLE()
         rc = unquoted_cell_spanner_(p);
         CSM_DEBUG("unquoted span: %d; p[3]=%d p[..17]='%.17s'", rc, p[3], p);
-        rc2 = quoted_cell_spanner_(p+16);
+        rc2 = unquoted_cell_spanner_(p+16);
         if(rc != 16) {
             p += rc;
             goto in_escape_or_end_of_unquoted_cell;
