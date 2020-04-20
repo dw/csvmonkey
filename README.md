@@ -43,9 +43,34 @@ microbenchmark of 24 CSV parsers.
 
 ## Python Usage
 
-1. `pip install -e . # or similar`
+You can install the library through pip:
+
+```
+pip install csvmonkey
+```
+
+If this fails on ubuntu, first install `clang`:
+
+```
+sudo apt-get install clang
+```
+
+Then run:
+
+```
+CC=clang pip install csvmonkey
+```
+
+You can also install the library locally by cloning this repo and running:
+
+```
+pip install -e .
+```
+
+Then you can use it likewise:
+
 1. `import csvmonkey`
-1. `csvmonkey.from_path()` for a memory-mapped file, `csvmonkey.from_file()`
+2. `csvmonkey.from_path()` for a memory-mapped file, `csvmonkey.from_file()`
    for any file-like object with a `read()` method, or `csvmonkey.from_iter()`
    for any iterable object that yields lines or file chunks, e.g.
    `from_iter(open("ram.csv"))`.
