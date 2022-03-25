@@ -7,6 +7,7 @@ from __future__ import print_function
 
 import platform
 import os
+import sys
 import ctypes
 from ctypes import c_uint32, c_int, c_size_t, c_void_p, POINTER, CFUNCTYPE
 
@@ -65,7 +66,7 @@ _CDECL_32_OPC = [
         0xc3                     # ret
 ]
 
-is_windows = os.name == "nt"
+is_windows = os.name == "nt" or sys.platform == "cygwin"
 is_64bit   = ctypes.sizeof(ctypes.c_voidp) == 8
 
 class CPUID_struct(ctypes.Structure):
