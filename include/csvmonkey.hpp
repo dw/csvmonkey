@@ -144,6 +144,14 @@ class MappedFileCursor
             throw Error("fstat", strerror(errno));
         }
 
+#ifdef __CYGWIN__
+        startp_ = (char *) mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+        ::close(fd);
+        if(! startp_) {
+            throw Error("mmap", "could not allocate mmap");
+        }
+#else
+
         // UNIX sucks. We can't use MAP_FIXED to ensure a guard page appears
         // after the file data because it'll silently overwrite mappings for
         // unrelated stuff in RAM (causing bizarro unrelated errors and
@@ -186,6 +194,7 @@ class MappedFileCursor
                   guardp_, startp, startp_);
             throw Error("mmap", "could not place data below guard page");
         }
+#endif
 
         ::madvise(startp_, st.st_size, MADV_SEQUENTIAL);
         ::madvise(startp_, st.st_size, MADV_WILLNEED);
