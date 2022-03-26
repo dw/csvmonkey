@@ -1,4 +1,4 @@
-# csvmonkey
+# csvmonkey - patched to work under Cygwin
 
 This is a header-only vectorized, lazy-decoding, zero-copy CSV file parser.
 Given appropriate input data and hardware, the C++ version can tokenize ~1.9
