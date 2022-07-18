@@ -7,9 +7,8 @@ from __future__ import print_function
 
 import platform
 import os
-import sys
 import ctypes
-from ctypes import c_uint32, c_int, c_size_t, c_void_p, POINTER, CFUNCTYPE
+from ctypes import c_uint32, c_int, c_long, c_ulong, c_size_t, c_void_p, POINTER, CFUNCTYPE
 
 # Posix x86_64:
 # Two first call registers : RDI, RSI
@@ -66,7 +65,7 @@ _CDECL_32_OPC = [
         0xc3                     # ret
 ]
 
-is_windows = os.name == "nt" or sys.platform == "cygwin"
+is_windows = os.name == "nt"
 is_64bit   = ctypes.sizeof(ctypes.c_voidp) == 8
 
 class CPUID_struct(ctypes.Structure):
@@ -99,6 +98,8 @@ class CPUID(object):
         self.r = CPUID_struct()
 
         if is_windows:
+            self.win.VirtualAlloc.restype = c_void_p
+            self.win.VirtualAlloc.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_ulong, ctypes.c_ulong]        
             self.addr = self.win.VirtualAlloc(None, size, 0x1000, 0x40)
             if not self.addr:
                 raise MemoryError("Could not allocate RWX memory")
@@ -128,6 +129,8 @@ class CPUID(object):
 
     def __del__(self):
         if is_windows:
+            self.win.VirtualFree.restype = c_long
+            self.win.VirtualFree.argtypes = [c_void_p, c_size_t, c_ulong]
             self.win.VirtualFree(self.addr, 0, 0x8000)
         elif self.libc:
             # Seems to throw exception when the program ends and
@@ -149,4 +152,3 @@ if __name__ == "__main__":
     print(" ".join(x.ljust(8) for x in ("CPUID", "A", "B", "C", "D")).strip())
     for eax, regs in valid_inputs():
         print("%08x" % eax, " ".join("%08x" % reg for reg in regs))
-
