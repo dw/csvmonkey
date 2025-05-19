@@ -340,7 +340,13 @@ struct CsvCell
         qi::parse(ptr, ptr+size, double_, n);
         return n;
 #else
-        return strtod(ptr, NULL);
+        double number;
+        std::from_chars(
+                ptr,
+                ptr + size,
+                number
+        );
+        return number;
 #endif
     }
 };
